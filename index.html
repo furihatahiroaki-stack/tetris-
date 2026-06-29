@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>TETRIS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      touch-action: manipulation;
+      -webkit-user-select: none; user-select: none;
+      font-family: 'Courier New', monospace;
+      color: #e0e0e0;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      transition: background 1.8s ease;
+      /* stage-0 default */
+      background: linear-gradient(160deg, #1a0500 0%, #3d1008 55%, #280c08 100%);
+    }
+
+    /* ── Background stages ── */
+    body.s0 { background: linear-gradient(160deg, #1a0500 0%, #3d1008 55%, #280c08 100%); }
+    body.s1 { background: linear-gradient(160deg, #1a0818 0%, #32103a 55%, #1a0e3a 100%); }
+    body.s2 { background: linear-gradient(160deg, #04050f 0%, #0a1230 55%, #060820 100%); }
+    body.s3 { background: linear-gradient(160deg, #020208 0%, #03102a 45%, #07041a 100%); }
+    body.s4 { background: linear-gradient(160deg, #000004 0%, #020018 35%, #001020 100%); }
+
+    /* ── HUD ── */
+    #hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      flex-shrink: 0;
+      height: 54px;
+      padding: 0 10px;
+      background: rgba(0,0,0,0.32);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .stat { display: flex; flex-direction: column; align-items: center; }
+    .stat-label { font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.38); }
+    .stat-val   { font-size: 20px; font-weight: bold; color: #e94560; line-height: 1.15; }
+
+    #music-btn {
+      background: rgba(255,255,255,0.09);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 20px;
+      width: 42px; height: 42px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      flex-shrink: 0;
+    }
+    #music-btn.muted { opacity: 0.35; }
+
+    /* ── Game area ── */
+    #game-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      overflow: hidden;
+      padding: 4px 6px;
+      min-height: 0;
+    }
+
+    #board-wrap {
+      position: relative;
+      flex-shrink: 0;
+      line-height: 0;
+    }
+
+    #board {
+      display: block;
+      border: 2px solid rgba(255,255,255,0.13);
+      border-radius: 3px;
+    }
+
+    /* ── Flash overlay ── */
+    #flash {
+      position: absolute; inset: 0;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+      border-radius: 3px;
+    }
+    @keyframes doFlash { 0%{opacity:.72} 100%{opacity:0} }
+    #flash.go { animation: doFlash .28s ease-out forwards; }
+
+    /* ── Shake ── */
+    @keyframes doShake {
+      0%  { transform:translate(0,0); }
+      18% { transform:translate(-5px,2px); }
+      36% { transform:translate(5px,-2px); }
+      54% { transform:translate(-3px,1px); }
+      72% { transform:translate(3px,-1px); }
+      100%{ transform:translate(0,0); }
+    }
+    #board-wrap.shake { animation: doShake .35s ease-out; }
+
+    /* ── Pause label ── */
+    #pause-lbl {
+      display: none;
+      position: absolute; inset: 0;
+      align-items: center; justify-content: center;
+      font-size: 30px; font-weight: bold; letter-spacing: 4px;
+      color: #fff; background: rgba(0,0,0,0.45);
+      border-radius: 3px;
+    }
+    #pause-lbl.show { display: flex; }
+
+    /* ── Overlay (game over) ── */
+    #overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.84);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px;
+      border-radius: 3px;
+      z-index: 10;
+    }
+    #overlay.hidden { display: none; }
+    #ov-title { font-size: 34px; font-weight: bold; color: #e94560; letter-spacing: 4px; }
+    #ov-score { font-size: 13px; color: rgba(255,255,255,0.65); text-align: center; line-height: 1.6; }
+    #btn-restart {
+      padding: 13px 32px;
+      background: #e94560; color: #fff;
+      border: none; border-radius: 7px;
+      font-size: 15px; font-family: inherit; font-weight: bold; letter-spacing: 1px;
+      cursor: pointer;
+      min-height: 50px; min-width: 140px;
+    }
+
+    /* ── Side panel ── */
+    #side-panel {
+      display: flex; flex-direction: column;
+      gap: 8px; flex-shrink: 0;
+    }
+    .side-box {
+      background: rgba(0,0,0,0.32);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 7px;
+      padding: 6px 8px;
+    }
+    .side-label { font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.32); margin-bottom: 4px; }
+    #next-canvas { display: block; }
+
+    /* ── Controls ── */
+    #controls {
+      flex-shrink: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 5px;
+      padding: 6px 8px;
+      padding-bottom: max(6px, env(safe-area-inset-bottom));
+      background: rgba(0,0,0,0.28);
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .cbtn {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 2px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 26px;
+      min-height: 58px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background .08s, transform .08s;
+      user-select: none;
+    }
+    .cbtn:active, .cbtn.pressed {
+      background: rgba(255,255,255,0.22);
+      transform: scale(0.92);
+    }
+    .cbtn .clabel { font-size: 9px; letter-spacing: 1px; color: rgba(255,255,255,0.38); }
+
+    #cbtn-left   { grid-column:1; grid-row:1; }
+    #cbtn-rot    { grid-column:2; grid-row:1; }
+    #cbtn-right  { grid-column:3; grid-row:1; }
+    #cbtn-soft   { grid-column:1; grid-row:2; }
+    #cbtn-hard   { grid-column:2/4; grid-row:2; background:rgba(233,69,96,0.13); border-color:rgba(233,69,96,0.28); }
+
+    /* ── Line-clear particle effect ── */
+    #particles {
+      position: absolute; inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      border-radius: 3px;
+    }
+    .spark {
+      position: absolute;
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    @keyframes sparkFly {
+      0%   { opacity:1; transform:translate(0,0) scale(1); }
+      100% { opacity:0; transform:var(--tx) scale(0); }
+    }
+  </style>
+</head>
+<body class="s0">
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="stat">
+      <div class="stat-label">SCORE</div>
+      <div class="stat-val" id="hud-score">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">LEVEL</div>
+      <div class="stat-val" id="hud-level">1</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">LINES</div>
+      <div class="stat-val" id="hud-lines">0</div>
+    </div>
+    <button id="music-btn" aria-label="Music toggle">🎵</button>
+  </div>
+
+  <!-- Game -->
+  <div id="game-area">
+    <div id="board-wrap">
+      <canvas id="board"></canvas>
+      <div id="flash"></div>
+      <div id="particles"></div>
+      <div id="pause-lbl">PAUSE</div>
+      <div id="overlay" class="hidden">
+        <div id="ov-title">GAME OVER</div>
+        <div id="ov-score"></div>
+        <button id="btn-restart">PLAY AGAIN</button>
+      </div>
+    </div>
+    <div id="side-panel">
+      <div class="side-box">
+        <div class="side-label">NEXT</div>
+        <canvas id="next-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="controls">
+    <button class="cbtn" id="cbtn-left">◀<span class="clabel">LEFT</span></button>
+    <button class="cbtn" id="cbtn-rot">↻<span class="clabel">ROTATE</span></button>
+    <button class="cbtn" id="cbtn-right">▶<span class="clabel">RIGHT</span></button>
+    <button class="cbtn" id="cbtn-soft">↓<span class="clabel">SOFT</span></button>
+    <button class="cbtn" id="cbtn-hard">⬇<span class="clabel">HARD DROP</span></button>
+  </div>
+
+<script>
+// ============================================================
+//  CONSTANTS
+// ============================================================
+const COLS = 10, ROWS = 20;
+
+const COLORS = {
+  I:'#00cfcf', O:'#f0d000', T:'#a000f0',
+  S:'#00c000', Z:'#d00000', J:'#1040e0', L:'#f09000',
+};
+
+const SHAPES = {
+  I:[[1,1,1,1]],
+  O:[[1,1],[1,1]],
+  T:[[0,1,0],[1,1,1]],
+  S:[[0,1,1],[1,1,0]],
+  Z:[[1,1,0],[0,1,1]],
+  J:[[1,0,0],[1,1,1]],
+  L:[[0,0,1],[1,1,1]],
+};
+const PNAMES = Object.keys(SHAPES);
+
+const LINE_PTS  = [0, 100, 300, 500, 800];
+const LVL_LINES = 10;
+const dropMs    = l => Math.max(80, 800 - (l-1)*70);
+
+// ============================================================
+//  LAYOUT
+// ============================================================
+const boardCanvas = document.getElementById('board');
+const ctx         = boardCanvas.getContext('2d');
+const nextCanvas  = document.getElementById('next-canvas');
+const nctx        = nextCanvas.getContext('2d');
+
+let CELL = 26;
+
+function calcLayout() {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const hudH  = document.getElementById('hud').offsetHeight  || 54;
+  const ctrlH = document.getElementById('controls').offsetHeight || 130;
+  const pad   = 14;
+  const availH = H - hudH - ctrlH - pad;
+  // reserve ~28% of width for side panel
+  const availW = W * 0.70;
+  const cH = Math.floor(availH / ROWS);
+  const cW = Math.floor(availW / COLS);
+  CELL = Math.max(16, Math.min(cH, cW, 34));
+
+  boardCanvas.width  = COLS * CELL;
+  boardCanvas.height = ROWS * CELL;
+
+  const nc = Math.min(20, CELL);
+  nextCanvas.width  = nc * 5;
+  nextCanvas.height = nc * 5;
+}
+
+// ============================================================
+//  AUDIO
+// ============================================================
+let audioCtx   = null;
+let masterGain = null;
+let musicOn    = true;
+let audioReady = false;
+let bgmGen     = 0;
+let bgmTimer   = null;
+let bgmNodes   = [];
+
+// Korobeiniki (Tetris Theme A) – note, beats
+const BPM = 160;
+const BS  = 60 / BPM; // seconds per beat
+
+const MELODY = [
+  ['E5',1],['B4',.5],['C5',.5],['D5',1],['C5',.5],['B4',.5],
+  ['A4',1],['A4',.5],['C5',.5],['E5',1],['D5',.5],['C5',.5],
+  ['B4',1.5],['C5',.5],['D5',1],['E5',1],
+  ['C5',1],['A4',1],['A4',2],
+  ['D5',1],['F5',.5],['A5',1],['G5',.5],['F5',.5],
+  ['E5',1.5],['C5',.5],['E5',1],['D5',.5],['C5',.5],
+  ['B4',1],['B4',.5],['C5',.5],['D5',1],['E5',1],
+  ['C5',1],['A4',1],['A4',2],
+];
+
+const HZ = {
+  E5:659.25, B4:493.88, C5:523.25, D5:587.33,
+  A4:440.00, F5:698.46, A5:880.00, G5:783.99,
+  E4:329.63, A3:220.00,
+};
+
+function getAC() {
+  if (!audioCtx) {
+    audioCtx   = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.connect(audioCtx.destination);
+  }
+  return audioCtx;
+}
+
+function unlockAudio() {
+  if (audioReady) return;
+  audioReady = true;
+  const ac = getAC();
+  if (ac.state === 'suspended') {
+    ac.resume().then(() => { if (musicOn && !gameOver) startBGM(); });
+  } else {
+    if (musicOn && !gameOver) startBGM();
+  }
+}
+
+/* ---- BGM ---- */
+function stopBGM() {
+  bgmGen++;
+  if (bgmTimer) { clearTimeout(bgmTimer); bgmTimer = null; }
+  const now = audioCtx ? audioCtx.currentTime : 0;
+  for (const n of bgmNodes) { try { n.stop(now+.01); n.disconnect(); } catch{} }
+  bgmNodes = [];
+}
+
+function startBGM() {
+  if (!audioReady || !musicOn) return;
+  const ac = getAC();
+  if (ac.state === 'suspended') { ac.resume().then(startBGM); return; }
+  stopBGM();
+  masterGain.gain.setValueAtTime(1, ac.currentTime);
+  const gen = bgmGen;
+  let t = ac.currentTime + 0.05;
+
+  function schedLoop() {
+    if (bgmGen !== gen) return;
+    for (const [note, beats] of MELODY) {
+      const dur = beats * BS;
+      if (HZ[note]) {
+        const osc  = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(masterGain);
+        osc.type = 'square';
+        osc.frequency.value = HZ[note];
+        gain.gain.setValueAtTime(0.06, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.88);
+        osc.start(t); osc.stop(t + dur);
+        bgmNodes.push(osc);
+      }
+      t += dur;
+    }
+    const msLeft = (t - ac.currentTime - 0.4) * 1000;
+    bgmTimer = setTimeout(schedLoop, Math.max(50, msLeft));
+  }
+  schedLoop();
+}
+
+/* ---- SFX ---- */
+function sfxTone(freq, dur, type='sine', vol=0.1, ramp=0.9) {
+  if (!audioReady) return;
+  const ac  = getAC();
+  const osc = ac.createOscillator();
+  const g   = ac.createGain();
+  osc.connect(g); g.connect(ac.destination);
+  osc.type = type;
+  osc.frequency.value = freq;
+  const t = ac.currentTime;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur * ramp);
+  osc.start(t); osc.stop(t + dur);
+}
+
+function sfxRotate() {
+  sfxTone(880, .045, 'sine', .09);
+  sfxTone(1200, .03, 'sine', .05);
+}
+
+function sfxLand() {
+  sfxTone(110, .09, 'triangle', .14);
+  sfxTone(80,  .12, 'sine',     .09);
+}
+
+function sfxClear(n) {
+  if (n >= 4) {
+    // Tetris fanfare
+    [523,659,784,1047].forEach((f,i) =>
+      setTimeout(() => sfxTone(f, .22, 'square', .10), i*55));
+    setTimeout(() => sfxTone(1047, .35, 'square', .12), 240);
+  } else {
+    // upward sweep
+    const ac = getAC();
+    const osc = ac.createOscillator();
+    const g   = ac.createGain();
+    osc.connect(g); g.connect(ac.destination);
+    osc.type = 'sine';
+    const t = ac.currentTime;
+    osc.frequency.setValueAtTime(260, t);
+    osc.frequency.exponentialRampToValueAtTime(1400, t + .18);
+    g.gain.setValueAtTime(.12, t);
+    g.gain.exponentialRampToValueAtTime(.0001, t + .22);
+    osc.start(t); osc.stop(t + .24);
+  }
+}
+
+function sfxGameOver() {
+  [440,330,220,110].forEach((f,i) =>
+    setTimeout(() => sfxTone(f, .2, 'square', .08), i*140));
+}
+
+/* ---- Music button ---- */
+document.getElementById('music-btn').addEventListener('click', () => {
+  musicOn = !musicOn;
+  document.getElementById('music-btn').classList.toggle('muted', !musicOn);
+  if (musicOn) {
+    if (masterGain) masterGain.gain.setValueAtTime(1, audioCtx.currentTime);
+    if (audioReady && !gameOver && !paused) startBGM();
+  } else {
+    stopBGM();
+  }
+});
+
+// Unlock on first user touch/click
+['touchstart','mousedown'].forEach(ev =>
+  document.addEventListener(ev, unlockAudio, { once:true, passive:true }));
+
+// ============================================================
+//  GAME STATE
+// ============================================================
+let board, cur, nxt, score, level, lines, paused, gameOver, dropTimer, lastTs;
+
+function mkPiece(name) {
+  return { name, mat: SHAPES[name].map(r=>[...r]), x:3, y:0 };
+}
+
+function init() {
+  board     = Array.from({length:ROWS}, ()=>Array(COLS).fill(null));
+  score     = 0; level = 1; lines = 0;
+  paused    = false; gameOver = false;
+  dropTimer = 0; lastTs = null;
+  nxt = mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
+  cur = advance();
+  updateHUD(); updateBG();
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('pause-lbl').classList.remove('show');
+  stopBGM();
+  if (audioReady && musicOn) startBGM();
+  requestAnimationFrame(loop);
+}
+
+function advance() {
+  const p = nxt;
+  p.x = (COLS - p.mat[0].length) >> 1;
+  p.y = 0;
+  nxt = mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
+  return p;
+}
+
+// ============================================================
+//  PHYSICS
+// ============================================================
+function hits(mat, ox, oy) {
+  for (let r=0; r<mat.length; r++)
+    for (let c=0; c<mat[r].length; c++) {
+      if (!mat[r][c]) continue;
+      const nx=ox+c, ny=oy+r;
+      if (nx<0||nx>=COLS||ny>=ROWS) return true;
+      if (ny>=0 && board[ny][nx]) return true;
+    }
+  return false;
+}
+
+function rotCW(mat) {
+  const R=mat.length, C=mat[0].length;
+  return Array.from({length:C},(_,c)=>
+    Array.from({length:R},(_,r)=>mat[R-1-r][c]));
+}
+
+function ghostRow() {
+  let gy=cur.y;
+  while(!hits(cur.mat,cur.x,gy+1)) gy++;
+  return gy;
+}
+
+function moveL()  { if(!hits(cur.mat,cur.x-1,cur.y)) cur.x--; }
+function moveR()  { if(!hits(cur.mat,cur.x+1,cur.y)) cur.x++; }
+
+function softDrop() {
+  if(!hits(cur.mat,cur.x,cur.y+1)) { cur.y++; score++; updateHUD(); }
+  else lock();
+}
+
+function hardDrop() {
+  const gy=ghostRow();
+  score += (gy-cur.y)*2; cur.y=gy;
+  updateHUD(); lock(); dropTimer=0;
+}
+
+function rotate() {
+  const rot=rotCW(cur.mat);
+  for (const k of [0,1,-1,2,-2]) {
+    if(!hits(rot,cur.x+k,cur.y)) {
+      cur.mat=rot; cur.x+=k; sfxRotate(); return;
+    }
+  }
+}
+
+function lock() {
+  for(let r=0;r<cur.mat.length;r++)
+    for(let c=0;c<cur.mat[r].length;c++) {
+      if(!cur.mat[r][c]) continue;
+      const ny=cur.y+r;
+      if(ny<0){ endGame(); return; }
+      board[ny][cur.x+c]=cur.name;
+    }
+  sfxLand();
+  clearLines();
+  cur=advance();
+  if(hits(cur.mat,cur.x,cur.y)) endGame();
+}
+
+function clearLines() {
+  let n=0;
+  for(let r=ROWS-1;r>=0;r--) {
+    if(board[r].every(c=>c!==null)) {
+      board.splice(r,1);
+      board.unshift(Array(COLS).fill(null));
+      n++; r++;
+    }
+  }
+  if(!n) return;
+  lines+=n; score+=LINE_PTS[n]*level;
+  level=Math.floor(lines/LVL_LINES)+1;
+  sfxClear(n);
+  fxClear(n);
+  updateHUD(); updateBG();
+}
+
+// ============================================================
+//  VISUAL FX
+// ============================================================
+function fxClear(n) {
+  // Flash
+  const f=document.getElementById('flash');
+  f.classList.remove('go');
+  void f.offsetWidth;
+  f.classList.add('go');
+  // Shake (stronger for tetris)
+  if(n>=2) {
+    const w=document.getElementById('board-wrap');
+    w.classList.remove('shake');
+    void w.offsetWidth;
+    w.classList.add('shake');
+    setTimeout(()=>w.classList.remove('shake'),400);
+  }
+  // Sparks
+  const pw = boardCanvas.width, ph = boardCanvas.height;
+  const pc = document.getElementById('particles');
+  const cols = ['#ffef00','#ff4444','#00ffcc','#ff88ff','#44aaff'];
+  for(let i=0;i<(n>=4?40:20);i++) {
+    const sp = document.createElement('div');
+    sp.className = 'spark';
+    const x = Math.random()*pw, y = Math.random()*ph*0.6+ph*0.2;
+    const tx = (Math.random()-0.5)*120+'px';
+    const ty = -(Math.random()*100+40)+'px';
+    sp.style.cssText = `
+      left:${x}px; top:${y}px;
+      background:${cols[i%cols.length]};
+      --tx:translate(${tx},${ty});
+      animation: sparkFly ${.4+Math.random()*.4}s ease-out ${Math.random()*.15}s forwards;
+    `;
+    pc.appendChild(sp);
+    setTimeout(()=>sp.remove(), 900);
+  }
+}
+
+// ============================================================
+//  BACKGROUND STAGES
+// ============================================================
+const BG_STAGES = [
+  [0,    's0'],   // Soviet cold-war: deep rust/red
+  [600,  's1'],   // Transition: dark purple
+  [2000, 's2'],   // Night city: navy
+  [5000, 's3'],   // Neon city: deep blue
+  [10000,'s4'],   // Full neon: electric
+];
+let lastStage = 's0';
+
+function updateBG() {
+  let cls='s0';
+  for(const [th,c] of BG_STAGES) if(score>=th) cls=c;
+  if(cls!==lastStage) {
+    document.body.classList.remove(lastStage);
+    document.body.classList.add(cls);
+    lastStage=cls;
+  }
+}
+
+// ============================================================
+//  DRAWING
+// ============================================================
+function drawCell(cx, x, y, color, size=CELL) {
+  cx.fillStyle=color;
+  cx.fillRect(x*size+1,y*size+1,size-2,size-2);
+  cx.fillStyle='rgba(255,255,255,.20)';
+  cx.fillRect(x*size+1,y*size+1,size-2,3);
+  cx.fillStyle='rgba(0,0,0,.22)';
+  cx.fillRect(x*size+1,y*size+size-4,size-2,3);
+}
+
+function render() {
+  ctx.clearRect(0,0,boardCanvas.width,boardCanvas.height);
+  // grid
+  ctx.strokeStyle='rgba(255,255,255,.04)';
+  ctx.lineWidth=1;
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
+    ctx.strokeRect(c*CELL,r*CELL,CELL,CELL);
+  // board
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
+    if(board[r][c]) drawCell(ctx,c,r,COLORS[board[r][c]]);
+  // ghost
+  const gy=ghostRow();
+  if(gy!==cur.y)
+    for(let r=0;r<cur.mat.length;r++) for(let c=0;c<cur.mat[r].length;c++)
+      if(cur.mat[r][c]) {
+        ctx.fillStyle='rgba(255,255,255,.09)';
+        ctx.fillRect((cur.x+c)*CELL+1,(gy+r)*CELL+1,CELL-2,CELL-2);
+      }
+  // current
+  for(let r=0;r<cur.mat.length;r++) for(let c=0;c<cur.mat[r].length;c++)
+    if(cur.mat[r][c]) drawCell(ctx,cur.x+c,cur.y+r,COLORS[cur.name]);
+}
+
+function renderNext() {
+  nctx.clearRect(0,0,nextCanvas.width,nextCanvas.height);
+  const m=nxt.mat;
+  const cs=Math.floor(nextCanvas.width/5);
+  const ox=Math.floor((nextCanvas.width  - m[0].length*cs)/2);
+  const oy=Math.floor((nextCanvas.height - m.length*cs)/2);
+  for(let r=0;r<m.length;r++) for(let c=0;c<m[r].length;c++)
+    if(m[r][c]) {
+      nctx.fillStyle=COLORS[nxt.name];
+      nctx.fillRect(ox+c*cs+1,oy+r*cs+1,cs-2,cs-2);
+      nctx.fillStyle='rgba(255,255,255,.2)';
+      nctx.fillRect(ox+c*cs+1,oy+r*cs+1,cs-2,3);
+    }
+}
+
+// ============================================================
+//  HUD
+// ============================================================
+function updateHUD() {
+  document.getElementById('hud-score').textContent=score.toLocaleString();
+  document.getElementById('hud-level').textContent=level;
+  document.getElementById('hud-lines').textContent=lines;
+}
+
+// ============================================================
+//  GAME LOOP
+// ============================================================
+function loop(ts) {
+  if(gameOver) return;
+  if(lastTs===null) lastTs=ts;
+  const dt=ts-lastTs; lastTs=ts;
+
+  if(!paused) {
+    dropTimer+=dt;
+    if(dropTimer>=dropMs(level)) {
+      dropTimer=0;
+      if(!hits(cur.mat,cur.x,cur.y+1)) cur.y++;
+      else lock();
+    }
+    render(); renderNext();
+  }
+  requestAnimationFrame(loop);
+}
+
+// ============================================================
+//  END / PAUSE
+// ============================================================
+function endGame() {
+  gameOver=true;
+  stopBGM(); sfxGameOver();
+  document.getElementById('ov-score').innerHTML=
+    `Score: ${score.toLocaleString()}<br>Level: ${level} &nbsp;Lines: ${lines}`;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+function togglePause() {
+  if(gameOver) return;
+  paused=!paused;
+  document.getElementById('pause-lbl').classList.toggle('show',paused);
+  if(paused) { stopBGM(); }
+  else { lastTs=null; if(audioReady&&musicOn) startBGM(); }
+}
+
+// ============================================================
+//  KEYBOARD
+// ============================================================
+document.addEventListener('keydown', e=>{
+  if(gameOver) return;
+  if(e.key==='p'||e.key==='P'){ togglePause(); return; }
+  if(paused) return;
+  switch(e.key){
+    case 'ArrowLeft':  e.preventDefault(); moveL();    break;
+    case 'ArrowRight': e.preventDefault(); moveR();    break;
+    case 'ArrowDown':  e.preventDefault(); softDrop(); break;
+    case 'ArrowUp':    e.preventDefault(); rotate();   break;
+    case ' ':          e.preventDefault(); hardDrop(); break;
+  }
+});
+
+// ============================================================
+//  TOUCH BUTTONS
+// ============================================================
+function bindBtn(id, action, autoRepeat=false) {
+  const el=document.getElementById(id);
+  let iv=null;
+
+  function start(e) {
+    e.preventDefault();
+    unlockAudio();
+    el.classList.add('pressed');
+    if(!gameOver&&!paused) {
+      action();
+      if(autoRepeat) iv=setInterval(()=>{ if(!gameOver&&!paused) action(); },110);
+    }
+  }
+  function end(e) {
+    e.preventDefault();
+    el.classList.remove('pressed');
+    if(iv){ clearInterval(iv); iv=null; }
+  }
+
+  el.addEventListener('touchstart', start, {passive:false});
+  el.addEventListener('touchend',   end,   {passive:false});
+  el.addEventListener('touchcancel',end,   {passive:false});
+  el.addEventListener('mousedown',  start);
+  el.addEventListener('mouseup',    end);
+  el.addEventListener('mouseleave', end);
+}
+
+bindBtn('cbtn-left',  moveL,    true);
+bindBtn('cbtn-right', moveR,    true);
+bindBtn('cbtn-rot',   rotate);
+bindBtn('cbtn-soft',  softDrop, true);
+bindBtn('cbtn-hard',  hardDrop);
+
+// ============================================================
+//  SWIPE ON BOARD
+// ============================================================
+let sx0,sy0,st0;
+
+boardCanvas.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  unlockAudio();
+  sx0=e.touches[0].clientX;
+  sy0=e.touches[0].clientY;
+  st0=Date.now();
+},{passive:false});
+
+boardCanvas.addEventListener('touchend', e=>{
+  e.preventDefault();
+  if(gameOver||paused) return;
+  const dx=e.changedTouches[0].clientX-sx0;
+  const dy=e.changedTouches[0].clientY-sy0;
+  const dist=Math.hypot(dx,dy);
+
+  if(dist<14 && Date.now()-st0<280) { rotate(); return; }
+  if(dist<18) return;
+
+  if(Math.abs(dx)>Math.abs(dy)) { if(dx>0) moveR(); else moveL(); }
+  else                           { if(dy>0) hardDrop(); else rotate(); }
+},{passive:false});
+
+// Prevent context menu on long-press
+document.addEventListener('contextmenu', e=>e.preventDefault());
+
+// ============================================================
+//  RESTART
+// ============================================================
+document.getElementById('btn-restart').addEventListener('touchstart', e=>{
+  e.preventDefault(); unlockAudio(); init();
+},{passive:false});
+document.getElementById('btn-restart').addEventListener('click', init);
+
+// ============================================================
+//  VISIBILITY (auto-pause when tab hidden)
+// ============================================================
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden && !paused && !gameOver) togglePause();
+});
+
+// ============================================================
+//  START
+// ============================================================
+calcLayout();
+window.addEventListener('resize', calcLayout);
+init();
+</script>
+</body>
+</html>

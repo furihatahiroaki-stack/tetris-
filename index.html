@@ -384,6 +384,7 @@ let audioCtx   = null;
 let masterGain = null;
 let musicOn    = true;
 let audioReady = false;
+let bgmGain    = null;
 let bgmGen     = 0;
 let bgmTimer   = null;
 let bgmNodes   = [];
@@ -420,6 +421,8 @@ function getAC() {
   if (!audioCtx) {
     audioCtx   = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
+    bgmGain    = audioCtx.createGain();
+    bgmGain.connect(masterGain);
     masterGain.connect(audioCtx.destination);
   }
   return audioCtx;
@@ -451,6 +454,7 @@ function startBGM() {
   if (ac.state === 'suspended') { ac.resume().then(startBGM); return; }
   stopBGM();
   masterGain.gain.setValueAtTime(1, ac.currentTime);
+  bgmGain.gain.setValueAtTime(1, ac.currentTime);
   const gen = bgmGen;
   let t = ac.currentTime + 0.05;
 
@@ -476,7 +480,7 @@ function schedNote(freq, t, dur, type, vol) {
   const ac = getAC();
   const osc = ac.createOscillator();
   const g   = ac.createGain();
-  osc.connect(g); g.connect(masterGain);
+  osc.connect(g); g.connect(bgmGain);
   osc.type = type;
   osc.frequency.value = freq;
   g.gain.setValueAtTime(vol, t);
@@ -501,7 +505,7 @@ function kickDrum(t) {
   const ac  = getAC();
   const osc = ac.createOscillator();
   const g   = ac.createGain();
-  osc.connect(g); g.connect(masterGain);
+  osc.connect(g); g.connect(bgmGain);
   osc.type = 'sine';
   osc.frequency.setValueAtTime(190, t);
   osc.frequency.exponentialRampToValueAtTime(28, t + 0.18);
@@ -518,7 +522,7 @@ function snareDrum(t) {
   const flt = ac.createBiquadFilter();
   flt.type = 'bandpass'; flt.frequency.value = 2800; flt.Q.value = 0.5;
   const g = ac.createGain();
-  src.connect(flt); flt.connect(g); g.connect(masterGain);
+  src.connect(flt); flt.connect(g); g.connect(bgmGain);
   g.gain.setValueAtTime(0.55, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
   src.start(t); src.stop(t + 0.14);
@@ -532,7 +536,7 @@ function hihatDrum(t) {
   const flt = ac.createBiquadFilter();
   flt.type = 'highpass'; flt.frequency.value = 10000;
   const g = ac.createGain();
-  src.connect(flt); flt.connect(g); g.connect(masterGain);
+  src.connect(flt); flt.connect(g); g.connect(bgmGain);
   g.gain.setValueAtTime(0.18, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
   src.start(t); src.stop(t + 0.05);
@@ -712,9 +716,13 @@ function sfxExplosion() {
 
 function startLuckyBGM() {
   if (!audioReady) return;
-  stopBGM();
   const ac = getAC();
   if (ac.state === 'suspended') { ac.resume().then(startLuckyBGM); return; }
+  // 通常BGMは止めずに無音化（位置を保持してシームレスに再開できるように）
+  if (!bgmTimer && musicOn && !gameOver && !paused) {
+    startBGM();  // BGMが停止していた場合だけ再起動（bgmGainは後で0に）
+  }
+  if (bgmGain) bgmGain.gain.setValueAtTime(0, ac.currentTime);
   luckyBGMGen++;
   const gen = luckyBGMGen;
   luckyBGMNodes = [];
@@ -756,7 +764,13 @@ function stopLuckyBGM(resume=true) {
   const now = audioCtx ? audioCtx.currentTime : 0;
   for (const n of luckyBGMNodes) { try { n.stop(now+0.05); n.disconnect(); } catch{} }
   luckyBGMNodes = [];
-  if (resume && audioReady && musicOn && !gameOver && !paused) startBGM();
+  if (resume && audioReady && musicOn && !gameOver && !paused) {
+    if (bgmGain && bgmTimer) {
+      bgmGain.gain.setValueAtTime(1, audioCtx.currentTime);  // BGM再生中→音量を戻すだけ
+    } else {
+      startBGM();  // BGMが停止していた場合だけ再起動
+    }
+  }
 }
 
 /* ---- Music button ---- */

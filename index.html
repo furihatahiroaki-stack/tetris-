@@ -880,7 +880,6 @@ function lock() {
       board[ny][cur.x+c] = isLucky ? 'LK' : cur.name;
     }
   if (isLucky) {
-    stopLuckyBGM(false);
     sfxExplosion();
     fxExplosion(ecx, ecy);
     explodeLucky(ecx, ecy);
@@ -891,7 +890,12 @@ function lock() {
   }
   clearLines();
   cur = advance();
-  if (cur.name === 'LUCKY') startLuckyBGM();
+  if (cur.name === 'LUCKY') {
+    stopLuckyBGM(false);
+    startLuckyBGM();
+  } else {
+    stopLuckyBGM(true); // resume regular BGM
+  }
   if(hits(cur.mat,cur.x,cur.y)) endGame();
 }
 

@@ -24,17 +24,17 @@
       height: 100dvh;
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
-      transition: background 1.8s ease;
-      /* stage-0 default */
-      background: linear-gradient(160deg, #1a0500 0%, #3d1008 55%, #280c08 100%);
+      background: #050a10;
     }
 
-    /* ── Background stages ── */
-    body.s0 { background: linear-gradient(160deg, #1a0500 0%, #3d1008 55%, #280c08 100%); }
-    body.s1 { background: linear-gradient(160deg, #1a0818 0%, #32103a 55%, #1a0e3a 100%); }
-    body.s2 { background: linear-gradient(160deg, #04050f 0%, #0a1230 55%, #060820 100%); }
-    body.s3 { background: linear-gradient(160deg, #020208 0%, #03102a 45%, #07041a 100%); }
-    body.s4 { background: linear-gradient(160deg, #000004 0%, #020018 35%, #001020 100%); }
+    /* ── Soviet cityscape background canvas ── */
+    #bgc {
+      position: fixed;
+      inset: 0;
+      width: 100%; height: 100%;
+      z-index: -1;
+      pointer-events: none;
+    }
 
     /* ── HUD ── */
     #hud {
@@ -217,7 +217,9 @@
     }
   </style>
 </head>
-<body class="s0">
+<body>
+
+  <canvas id="bgc"></canvas>
 
   <!-- HUD -->
   <div id="hud">
@@ -335,7 +337,7 @@ let bgmTimer   = null;
 let bgmNodes   = [];
 
 // Korobeiniki (Tetris Theme A) – note, beats
-const BPM = 160;
+const BPM = 200;
 const BS  = 60 / BPM; // seconds per beat
 
 const MELODY = [
@@ -395,25 +397,122 @@ function startBGM() {
 
   function schedLoop() {
     if (bgmGen !== gen) return;
+    const loopStart = t;
     for (const [note, beats] of MELODY) {
       const dur = beats * BS;
-      if (HZ[note]) {
-        const osc  = ac.createOscillator();
-        const gain = ac.createGain();
-        osc.connect(gain); gain.connect(masterGain);
-        osc.type = 'square';
-        osc.frequency.value = HZ[note];
-        gain.gain.setValueAtTime(0.06, t);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.88);
-        osc.start(t); osc.stop(t + dur);
-        bgmNodes.push(osc);
-      }
+      if (HZ[note]) schedNote(HZ[note], t, dur * 0.82, 'square', 0.07);
       t += dur;
     }
+    const loopDur = t - loopStart;
+    schedBass(loopStart, loopDur);
+    schedDrums(loopStart, loopDur);
     const msLeft = (t - ac.currentTime - 0.4) * 1000;
     bgmTimer = setTimeout(schedLoop, Math.max(50, msLeft));
   }
   schedLoop();
+}
+
+/* ---- BGM note helper ---- */
+function schedNote(freq, t, dur, type, vol) {
+  const ac = getAC();
+  const osc = ac.createOscillator();
+  const g   = ac.createGain();
+  osc.connect(g); g.connect(masterGain);
+  osc.type = type;
+  osc.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.start(t); osc.stop(t + dur + 0.01);
+  bgmNodes.push(osc);
+}
+
+/* ---- Drums (Web Audio noise) ---- */
+let _noiseBuf = null;
+function getNoiseBuf() {
+  if (_noiseBuf && audioCtx) return _noiseBuf;
+  const ac  = getAC();
+  const len = Math.floor(ac.sampleRate * 0.5);
+  _noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+  const d   = _noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random()*2 - 1;
+  return _noiseBuf;
+}
+
+function kickDrum(t) {
+  const ac  = getAC();
+  const osc = ac.createOscillator();
+  const g   = ac.createGain();
+  osc.connect(g); g.connect(masterGain);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(190, t);
+  osc.frequency.exponentialRampToValueAtTime(28, t + 0.18);
+  g.gain.setValueAtTime(1.0, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  osc.start(t); osc.stop(t + 0.23);
+  bgmNodes.push(osc);
+}
+
+function snareDrum(t) {
+  const ac  = getAC();
+  const src = ac.createBufferSource();
+  src.buffer = getNoiseBuf();
+  const flt = ac.createBiquadFilter();
+  flt.type = 'bandpass'; flt.frequency.value = 2800; flt.Q.value = 0.5;
+  const g = ac.createGain();
+  src.connect(flt); flt.connect(g); g.connect(masterGain);
+  g.gain.setValueAtTime(0.55, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+  src.start(t); src.stop(t + 0.14);
+  bgmNodes.push(src);
+}
+
+function hihatDrum(t) {
+  const ac  = getAC();
+  const src = ac.createBufferSource();
+  src.buffer = getNoiseBuf();
+  const flt = ac.createBiquadFilter();
+  flt.type = 'highpass'; flt.frequency.value = 10000;
+  const g = ac.createGain();
+  src.connect(flt); flt.connect(g); g.connect(masterGain);
+  g.gain.setValueAtTime(0.18, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+  src.start(t); src.stop(t + 0.05);
+  bgmNodes.push(src);
+}
+
+const KICK_P  = [1,0,0,0, 0,0,1,0, 1,0,0,1, 0,0,1,0];
+const SNARE_P = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0];
+const HAT_P   = [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0];
+const SIXTEENTH = BS / 4;
+
+function schedDrums(startT, totalSec) {
+  const barDur = 16 * SIXTEENTH;
+  let t = startT;
+  while (t < startT + totalSec - SIXTEENTH) {
+    for (let s = 0; s < 16; s++) {
+      const st = t + s * SIXTEENTH;
+      if (st >= startT + totalSec) break;
+      if (KICK_P[s])  kickDrum(st);
+      if (SNARE_P[s]) snareDrum(st);
+      if (HAT_P[s])   hihatDrum(st);
+    }
+    t += barDur;
+  }
+}
+
+const BASS_HZ  = { A2:110.00, E3:164.81, D3:146.83 };
+const BASS_PAT = [['A2',1.5],['E3',.5],['A2',.5],['E3',.5],['A2',.5],['E3',.5]]; // 4 beats
+
+function schedBass(startT, totalSec) {
+  let t = startT;
+  while (t < startT + totalSec - 0.05) {
+    for (const [note, beats] of BASS_PAT) {
+      if (t >= startT + totalSec) break;
+      const dur = beats * BS;
+      if (BASS_HZ[note]) schedNote(BASS_HZ[note], t, dur * 0.68, 'sawtooth', 0.14);
+      t += dur;
+    }
+  }
 }
 
 /* ---- SFX ---- */
@@ -501,6 +600,7 @@ function init() {
   nxt = mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
   cur = advance();
   updateHUD(); updateBG();
+  _bgPh = -1;
   document.getElementById('overlay').classList.add('hidden');
   document.getElementById('pause-lbl').classList.remove('show');
   stopBGM();
@@ -635,26 +735,194 @@ function fxClear(n) {
 }
 
 // ============================================================
-//  BACKGROUND STAGES
+//  SOVIET CITYSCAPE BACKGROUND
 // ============================================================
-const BG_STAGES = [
-  [0,    's0'],   // Soviet cold-war: deep rust/red
-  [600,  's1'],   // Transition: dark purple
-  [2000, 's2'],   // Night city: navy
-  [5000, 's3'],   // Neon city: deep blue
-  [10000,'s4'],   // Full neon: electric
-];
-let lastStage = 's0';
+let _bgPh = -1;
 
-function updateBG() {
-  let cls='s0';
-  for(const [th,c] of BG_STAGES) if(score>=th) cls=c;
-  if(cls!==lastStage) {
-    document.body.classList.remove(lastStage);
-    document.body.classList.add(cls);
-    lastStage=cls;
+function getBGPh() {
+  if (score >= 10000) return 4;
+  if (score >= 5000)  return 3;
+  if (score >= 2000)  return 2;
+  if (score >= 600)   return 1;
+  return 0;
+}
+
+function drawSovietBG(force) {
+  const bc = document.getElementById('bgc');
+  const ph = getBGPh();
+  if (!force && ph === _bgPh &&
+      bc.width === window.innerWidth && bc.height === window.innerHeight) return;
+  _bgPh = ph;
+  bc.width  = window.innerWidth;
+  bc.height = window.innerHeight;
+  const gc = bc.getContext('2d');
+  const W = bc.width, H = bc.height;
+
+  // ── Sky ──
+  const skyT = ['#6a7b8c','#38495a','#111c28','#080e18','#03060e'][ph];
+  const skyB = ['#96aab6','#5c6e7e','#1c2a38','#0c1420','#060a12'][ph];
+  const skyG = gc.createLinearGradient(0, 0, 0, H * 0.74);
+  skyG.addColorStop(0, skyT); skyG.addColorStop(1, skyB);
+  gc.fillStyle = skyG;
+  gc.fillRect(0, 0, W, H);
+
+  // ── Ground ──
+  const gY = H * 0.76;
+  gc.fillStyle = ['#424a38','#2e3826','#10180e','#080c08','#050808'][ph];
+  gc.fillRect(0, gY, W, H - gY);
+  if (ph >= 2) {
+    const rg = gc.createLinearGradient(0, gY, 0, H);
+    rg.addColorStop(0, `rgba(30,55,90,${(ph-1)*0.07})`);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    gc.fillStyle = rg; gc.fillRect(0, gY, W, H - gY);
+  }
+
+  // ── Clouds (ph 0-1) ──
+  if (ph <= 1) {
+    gc.fillStyle = `rgba(185,198,210,${ph===0?0.24:0.11})`;
+    [[0.08,0.12,0.14,0.042],[0.33,0.09,0.12,0.036],
+     [0.60,0.15,0.13,0.040],[0.83,0.10,0.09,0.032]].forEach(([cx,cy,rx,ry])=>{
+      gc.beginPath();
+      gc.ellipse(cx*W, cy*H, rx*W, ry*H, 0, 0, Math.PI*2);
+      gc.fill();
+    });
+  }
+
+  // ── Stars (ph 2+) ──
+  if (ph >= 2) {
+    gc.fillStyle = `rgba(255,255,255,${0.38+ph*0.09})`;
+    [0.12,0.78,0.34,0.56,0.89,0.23,0.67,0.45,0.91,0.15,0.72,0.38,0.60,0.05,0.84]
+      .forEach((sx,i)=>{ gc.fillRect(sx*W, (0.03+i*0.047%0.62)*H*0.72, 1.5, 1.5); });
+  }
+
+  // ── Building layers (back → front) ──
+  const layers = [
+    { n:10, minF:10, maxF:14, sc:0.52, dy:-0.02, al:0.62 },
+    { n:7,  minF:7,  maxF:11, sc:0.72, dy: 0.00, al:0.82 },
+    { n:5,  minF:5,  maxF:9,  sc:1.00, dy: 0.04, al:1.00 },
+  ];
+
+  // Wall RGB per phase [bright side, dark side]
+  const wallRGB = [
+    [[118,130,140],[96,108,118]],
+    [[72,86,96],[52,66,76]],
+    [[20,30,40],[12,20,30]],
+    [[8,14,24],[4,9,18]],
+    [[4,8,16],[2,5,12]],
+  ];
+
+  for (let li = 0; li < 3; li++) {
+    const { n, minF, maxF, sc, dy, al } = layers[li];
+    const bw = (W / n) * 0.90;
+    const flH = 22 * sc;
+
+    for (let bi = 0; bi < n; bi++) {
+      const seed  = li * 200 + bi * 17;
+      const floors = minF + (seed % (maxF - minF + 1));
+      const bh    = floors * flH;
+      const bx    = (W / n) * bi + li * 3;
+      const by    = gY + dy * H - bh;
+
+      // Wall gradient
+      const [wr,wg,wb] = wallRGB[ph][0];
+      const [dr,dg,db] = wallRGB[ph][1];
+      const wG = gc.createLinearGradient(bx, by, bx+bw, by);
+      wG.addColorStop(0,   `rgba(${wr},${wg},${wb},${al})`);
+      wG.addColorStop(0.5, `rgba(${dr},${dg},${db},${al})`);
+      wG.addColorStop(1,   `rgba(${wr},${wg},${wb},${al})`);
+      gc.fillStyle = wG;
+      gc.fillRect(bx, by, bw, bh);
+
+      // Roof ledge
+      gc.fillStyle = `rgba(${wr+20},${wg+20},${wb+20},${al})`;
+      gc.fillRect(bx-2, by-3, bw+4, 4);
+
+      // Floor dividers
+      if (li >= 1) {
+        gc.fillStyle = `rgba(0,0,0,${al*0.15})`;
+        for (let row = 1; row < floors; row++)
+          gc.fillRect(bx, by + row*flH, bw, 1);
+      }
+
+      // Windows
+      const winW = Math.max(4, Math.round(9*sc));
+      const winH = Math.max(3, Math.round(7*sc));
+      const gapX = Math.max(2, Math.round(5*sc));
+      const gapY = Math.round(flH * 0.28);
+      const cols = Math.max(2, Math.floor((bw-gapX*1.5)/(winW+gapX)));
+      const padX = (bw - cols*(winW+gapX) + gapX) * 0.5;
+      const darkTh = [22,28,40,50,55][ph];
+
+      for (let row = 0; row < floors; row++) {
+        for (let col = 0; col < cols; col++) {
+          const wx = bx + padX + col*(winW+gapX);
+          const wy = by + row*flH + gapY;
+          const ws = (seed + row*19 + col*37) % 100;
+
+          if (ws <= darkTh) {
+            gc.fillStyle = `rgba(6,10,14,${al*0.9})`;
+            gc.fillRect(wx, wy, winW, winH);
+            continue;
+          }
+
+          let wc;
+          if (ph === 0) {
+            wc = `rgba(255,242,195,${0.82*al})`;
+          } else if (ph === 1) {
+            wc = ws%3===0 ? `rgba(255,215,130,${0.78*al})` : `rgba(255,238,185,${0.82*al})`;
+          } else if (ph === 2) {
+            wc = `rgba(255,224,138,${0.88*al})`;
+          } else if (ph === 3) {
+            const nc = ['rgba(255,80,40,','rgba(40,195,255,','rgba(255,235,70,','rgba(195,40,255,','rgba(40,255,175,'];
+            wc = nc[ws%nc.length]+al+')';
+          } else {
+            const nc = ['rgba(255,0,80,','rgba(0,255,195,','rgba(255,38,0,','rgba(120,0,255,','rgba(0,175,255,'];
+            wc = nc[ws%nc.length]+al+')';
+          }
+
+          // Soft glow for foreground night windows
+          if (ph >= 3 && li === 2) {
+            gc.fillStyle = wc.replace(/[\d.]+\)$/,'0.16)');
+            gc.fillRect(wx-2, wy-2, winW+4, winH+4);
+          }
+          gc.fillStyle = wc;
+          gc.fillRect(wx, wy, winW, winH);
+        }
+      }
+
+      // Balconies (foreground, daytime)
+      if (li === 2 && ph <= 1) {
+        for (let row = 0; row < floors; row++) {
+          if ((seed+row)%3 !== 0) continue;
+          gc.fillStyle = `rgba(100,112,118,${al*0.60})`;
+          gc.fillRect(bx+2, by+row*flH+flH*0.68, bw-4, Math.max(2, Math.round(sc*3)));
+        }
+      }
+    }
+  }
+
+  // ── Neon signs (ph 3-4) ──
+  if (ph >= 3) {
+    const na = ph===3 ? 0.72 : 1.0;
+    [{ x:.11,y:.695,w:.076,h:.026,c:'#ff0055' },
+     { x:.37,y:.662,w:.063,h:.022,c:'#00ffcc' },
+     { x:.63,y:.712,w:.082,h:.028,c:'#ff4400' },
+     { x:.84,y:.674,w:.055,h:.020,c:'#9900ff' }]
+    .forEach(({ x,y,w,h,c })=>{
+      gc.save();
+      gc.globalAlpha = na;
+      gc.shadowBlur = 22; gc.shadowColor = c;
+      gc.fillStyle = c;
+      gc.fillRect(x*W, y*H, w*W, h*H);
+      gc.shadowBlur = 5;
+      gc.fillStyle = 'rgba(255,255,255,0.88)';
+      gc.fillRect(x*W+1, y*H+1, w*W-2, h*H-2);
+      gc.restore();
+    });
   }
 }
+
+function updateBG() { drawSovietBG(); }
 
 // ============================================================
 //  DRAWING
@@ -669,9 +937,10 @@ function drawCell(cx, x, y, color, size=CELL) {
 }
 
 function render() {
-  ctx.clearRect(0,0,boardCanvas.width,boardCanvas.height);
+  ctx.fillStyle='rgba(0,2,8,0.52)';
+  ctx.fillRect(0,0,boardCanvas.width,boardCanvas.height);
   // grid
-  ctx.strokeStyle='rgba(255,255,255,.04)';
+  ctx.strokeStyle='rgba(255,255,255,.07)';
   ctx.lineWidth=1;
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
     ctx.strokeRect(c*CELL,r*CELL,CELL,CELL);
@@ -855,7 +1124,7 @@ document.addEventListener('visibilitychange', ()=>{
 //  START
 // ============================================================
 calcLayout();
-window.addEventListener('resize', calcLayout);
+window.addEventListener('resize', () => { calcLayout(); drawSovietBG(true); });
 init();
 </script>
 </body>

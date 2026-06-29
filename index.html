@@ -578,6 +578,7 @@ function sfxLand() {
 }
 
 function sfxClear(n) {
+  sfxLineBoom(n);
   if (n >= 4) {
     // Tetris fanfare
     [523,659,784,1047].forEach((f,i) =>
@@ -596,6 +597,61 @@ function sfxClear(n) {
     g.gain.setValueAtTime(.12, t);
     g.gain.exponentialRampToValueAtTime(.0001, t + .22);
     osc.start(t); osc.stop(t + .24);
+  }
+}
+
+function sfxLineBoom(n) {
+  if (!audioReady) return;
+  const ac = getAC(), t = ac.currentTime;
+  const sc = 0.6 + n * 0.25; // n=1:0.85 / n=4:1.6
+
+  // 低音ドーン (sine sweep)
+  const boom = ac.createOscillator(), bg = ac.createGain();
+  boom.connect(bg); bg.connect(ac.destination);
+  boom.type = 'sine';
+  boom.frequency.setValueAtTime(75 + n*14, t);
+  boom.frequency.exponentialRampToValueAtTime(16, t + 0.46 + n*0.06);
+  bg.gain.setValueAtTime(sc * 1.1, t);
+  bg.gain.exponentialRampToValueAtTime(0.001, t + 0.46 + n*0.06);
+  boom.start(t); boom.stop(t + 0.5 + n*0.07);
+
+  // ノイズ破裂 (lowpass)
+  const nlen = Math.floor(ac.sampleRate * (0.28 + n*0.05));
+  const nbuf = ac.createBuffer(1, nlen, ac.sampleRate);
+  const nd = nbuf.getChannelData(0);
+  for (let i = 0; i < nlen; i++) nd[i] = Math.random()*2-1;
+  const nsrc = ac.createBufferSource(); nsrc.buffer = nbuf;
+  const nlp = ac.createBiquadFilter();
+  nlp.type = 'lowpass'; nlp.frequency.value = 550 + n*100;
+  const ng = ac.createGain();
+  nsrc.connect(nlp); nlp.connect(ng); ng.connect(ac.destination);
+  ng.gain.setValueAtTime(sc * 1.6, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.28 + n*0.05);
+  nsrc.start(t); nsrc.stop(t + 0.3 + n*0.06);
+
+  // テトリス(4ライン)時: サブ低音 + 高域クラック
+  if (n >= 4) {
+    const sub = ac.createOscillator(), sg = ac.createGain();
+    sub.connect(sg); sg.connect(ac.destination);
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(50, t);
+    sub.frequency.exponentialRampToValueAtTime(13, t + 0.85);
+    sg.gain.setValueAtTime(1.0, t);
+    sg.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+    sub.start(t); sub.stop(t + 0.87);
+
+    const clen = Math.floor(ac.sampleRate * 0.22);
+    const cbuf = ac.createBuffer(1, clen, ac.sampleRate);
+    const cd = cbuf.getChannelData(0);
+    for (let i = 0; i < clen; i++) cd[i] = Math.random()*2-1;
+    const csrc = ac.createBufferSource(); csrc.buffer = cbuf;
+    const chp = ac.createBiquadFilter();
+    chp.type = 'highpass'; chp.frequency.value = 2800;
+    const cg = ac.createGain();
+    csrc.connect(chp); chp.connect(cg); cg.connect(ac.destination);
+    cg.gain.setValueAtTime(0.55, t);
+    cg.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    csrc.start(t); csrc.stop(t + 0.23);
   }
 }
 

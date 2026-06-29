@@ -276,7 +276,7 @@ const COLS = 10, ROWS = 20;
 
 const COLORS = {
   I:'#00cfcf', O:'#f0d000', T:'#a000f0',
-  S:'#00c000', Z:'#d00000', J:'#1040e0', L:'#f09000',
+  S:'#00c000', Z:'#d00000', J:'#1040e0', L:'#f09000', LK:'#ffee44',
 };
 
 const SHAPES = {
@@ -289,6 +289,36 @@ const SHAPES = {
   L:[[0,0,1],[1,1,1]],
 };
 const PNAMES = Object.keys(SHAPES);
+
+// ---- ラッキー棒 ----
+const GIRL_ART = [
+  '___PPP__',
+  '__PPPPP_',
+  '__KKKKK_',
+  '_KFFFFK_',
+  '_KFEFEF_',
+  '_KFFFFK_',
+  '_KFMMFK_',
+  '__KFFK__',
+  '__DDDD__',
+  '_DDDDDD_',
+];
+const GIRL_C = { P:'#ff88c8',K:'#222',F:'#ffd0a0',E:'#1a2a50',M:'#ff7070',D:'#88d4ff' };
+
+const LUCKY_BGM = [
+  ['C5',.5],['E5',.5],['G5',.5],['C6',.5],
+  ['E6',.5],['C6',.5],['G5',.5],['E5',.5],
+  ['F5',.5],['A5',.5],['C6',.5],['A5',.5],
+  ['G5',1.0],['E5',.5],['G5',.5],
+  ['C5',.5],['D5',.5],['E5',.5],['F5',.5],
+  ['G5',.5],['A5',.5],['B5',.5],['C6',.5],
+  ['B5',.5],['A5',.5],['G5',.5],['F5',.5],
+  ['E5',.5],['D5',.5],['C5',1.5],
+];
+const LUCKY_HZ = {
+  C5:523.25, D5:587.33, E5:659.25, F5:698.46,
+  G5:783.99, A5:880.00, B5:987.77, C6:1046.50, E6:1318.51,
+};
 
 const LINE_PTS  = [0, 100, 300, 500, 800];
 const LVL_LINES = 10;
@@ -335,6 +365,9 @@ let audioReady = false;
 let bgmGen     = 0;
 let bgmTimer   = null;
 let bgmNodes   = [];
+let luckyBGMGen   = 0;
+let luckyBGMTimer = null;
+let luckyBGMNodes = [];
 
 // Korobeiniki (Tetris Theme A) – note, beats
 const BPM = 200;
@@ -571,15 +604,96 @@ function sfxGameOver() {
     setTimeout(() => sfxTone(f, .2, 'square', .08), i*140));
 }
 
+function sfxExplosion() {
+  if (!audioReady) return;
+  const ac = getAC(), t = ac.currentTime;
+  // 低音のドカン
+  const boom = ac.createOscillator(), bg = ac.createGain();
+  boom.connect(bg); bg.connect(ac.destination);
+  boom.type = 'sine';
+  boom.frequency.setValueAtTime(130, t);
+  boom.frequency.exponentialRampToValueAtTime(18, t + 0.55);
+  bg.gain.setValueAtTime(1.8, t);
+  bg.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  boom.start(t); boom.stop(t + 0.56);
+  // ノイズの破裂
+  const nlen = Math.floor(ac.sampleRate * 0.35);
+  const nbuf = ac.createBuffer(1, nlen, ac.sampleRate);
+  const nd = nbuf.getChannelData(0);
+  for (let i = 0; i < nlen; i++) nd[i] = Math.random()*2-1;
+  const nsrc = ac.createBufferSource();
+  nsrc.buffer = nbuf;
+  const nlp = ac.createBiquadFilter();
+  nlp.type = 'lowpass'; nlp.frequency.value = 900;
+  const ng = ac.createGain();
+  nsrc.connect(nlp); nlp.connect(ng); ng.connect(ac.destination);
+  ng.gain.setValueAtTime(2.2, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+  nsrc.start(t); nsrc.stop(t + 0.39);
+}
+
+function startLuckyBGM() {
+  if (!audioReady) return;
+  stopBGM();
+  const ac = getAC();
+  if (ac.state === 'suspended') { ac.resume().then(startLuckyBGM); return; }
+  luckyBGMGen++;
+  const gen = luckyBGMGen;
+  luckyBGMNodes = [];
+  let t = ac.currentTime + 0.05;
+
+  function schedLucky() {
+    if (luckyBGMGen !== gen) return;
+    for (const [note, beats] of LUCKY_BGM) {
+      const dur = beats * BS;
+      if (LUCKY_HZ[note]) {
+        // メイン: サイン波（ベル系）
+        const osc = ac.createOscillator(), g = ac.createGain();
+        osc.connect(g); g.connect(masterGain);
+        osc.type = 'sine'; osc.frequency.value = LUCKY_HZ[note];
+        g.gain.setValueAtTime(0.20, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.72);
+        osc.start(t); osc.stop(t + dur);
+        luckyBGMNodes.push(osc);
+        // キラキラ: トライアングル1オクターブ上
+        const tw = ac.createOscillator(), tg = ac.createGain();
+        tw.connect(tg); tg.connect(masterGain);
+        tw.type = 'triangle'; tw.frequency.value = LUCKY_HZ[note] * 2;
+        tg.gain.setValueAtTime(0.07, t);
+        tg.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.4);
+        tw.start(t); tw.stop(t + dur * 0.45);
+        luckyBGMNodes.push(tw);
+      }
+      t += dur;
+    }
+    const msLeft = (t - ac.currentTime - 0.4) * 1000;
+    luckyBGMTimer = setTimeout(schedLucky, Math.max(50, msLeft));
+  }
+  schedLucky();
+}
+
+function stopLuckyBGM(resume=true) {
+  luckyBGMGen++;
+  if (luckyBGMTimer) { clearTimeout(luckyBGMTimer); luckyBGMTimer = null; }
+  const now = audioCtx ? audioCtx.currentTime : 0;
+  for (const n of luckyBGMNodes) { try { n.stop(now+0.05); n.disconnect(); } catch{} }
+  luckyBGMNodes = [];
+  if (resume && audioReady && musicOn && !gameOver && !paused) startBGM();
+}
+
 /* ---- Music button ---- */
 document.getElementById('music-btn').addEventListener('click', () => {
   musicOn = !musicOn;
   document.getElementById('music-btn').classList.toggle('muted', !musicOn);
   if (musicOn) {
     if (masterGain) masterGain.gain.setValueAtTime(1, audioCtx.currentTime);
-    if (audioReady && !gameOver && !paused) startBGM();
+    if (audioReady && !gameOver && !paused) {
+      if (cur && cur.name === 'LUCKY') startLuckyBGM();
+      else startBGM();
+    }
   } else {
     stopBGM();
+    stopLuckyBGM(false);
   }
 });
 
@@ -596,19 +710,28 @@ function mkPiece(name) {
   return { name, mat: SHAPES[name].map(r=>[...r]), x:3, y:0 };
 }
 
+function randomPiece() {
+  if (Math.random() < 1/30)
+    return { name:'LUCKY', mat:[[1,1,1,1]], x:3, y:0 };
+  return mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
+}
+
 function init() {
   board     = Array.from({length:ROWS}, ()=>Array(COLS).fill(null));
   score     = 0; level = 1; lines = 0;
   paused    = false; gameOver = false;
   dropTimer = 0; lastTs = null;
-  nxt = mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
+  nxt = randomPiece();
   cur = advance();
   updateHUD(); updateBG();
   _bgPh = -1;
   document.getElementById('overlay').classList.add('hidden');
   document.getElementById('pause-lbl').classList.remove('show');
-  stopBGM();
-  if (audioReady && musicOn) startBGM();
+  stopBGM(); stopLuckyBGM(false);
+  if (audioReady && musicOn) {
+    if (cur.name === 'LUCKY') startLuckyBGM();
+    else startBGM();
+  }
   requestAnimationFrame(loop);
 }
 
@@ -616,7 +739,7 @@ function advance() {
   const p = nxt;
   p.x = (COLS - p.mat[0].length) >> 1;
   p.y = 0;
-  nxt = mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
+  nxt = randomPiece();
   return p;
 }
 
@@ -670,16 +793,28 @@ function rotate() {
 }
 
 function lock() {
+  const isLucky = cur.name === 'LUCKY';
+  const ecx = cur.x + 1, ecy = cur.y;
   for(let r=0;r<cur.mat.length;r++)
     for(let c=0;c<cur.mat[r].length;c++) {
       if(!cur.mat[r][c]) continue;
       const ny=cur.y+r;
       if(ny<0){ endGame(); return; }
-      board[ny][cur.x+c]=cur.name;
+      board[ny][cur.x+c] = isLucky ? 'LK' : cur.name;
     }
-  sfxLand();
+  if (isLucky) {
+    stopLuckyBGM(false);
+    sfxExplosion();
+    fxExplosion(ecx, ecy);
+    explodeLucky(ecx, ecy);
+    score += 500 * level;
+    updateHUD();
+  } else {
+    sfxLand();
+  }
   clearLines();
-  cur=advance();
+  cur = advance();
+  if (cur.name === 'LUCKY') startLuckyBGM();
   if(hits(cur.mat,cur.x,cur.y)) endGame();
 }
 
@@ -940,6 +1075,99 @@ function drawCell(cx, x, y, color, size=CELL) {
   cx.fillRect(x*size+1,y*size+size-4,size-2,3);
 }
 
+// ---- ラッキー棒 描画 ----
+function drawGirl(bx, by) {
+  const P = Math.max(3, Math.floor(CELL / 4));
+  const map = { P:'#ff88c8',K:'#222',F:'#ffd0a0',E:'#1a2a50',M:'#ff7070',D:'#88d4ff' };
+  GIRL_ART.forEach((row, ry) => {
+    [...row].forEach((ch, cx) => {
+      const c = map[ch]; if (!c) return;
+      ctx.fillStyle = c;
+      ctx.fillRect(bx + cx*P, by + ry*P, P, P);
+    });
+  });
+  // ピースサイン (キャラ右横)
+  const vx = bx + 7*P, vy = by + 3*P;
+  ctx.fillStyle = '#ffd0a0';
+  ctx.fillRect(vx + P, vy + 2*P, P, P*2);   // 手首
+  ctx.fillStyle = '#ffe060';
+  ctx.fillRect(vx,     vy,        P, P*2);   // 人差し指
+  ctx.fillRect(vx+2*P, vy,        P, P*2);   // 中指
+}
+
+function drawLuckyBar() {
+  const t = Date.now() / 1000;
+  // 虹色セル
+  for (let c = 0; c < 4; c++) {
+    const hue = (t * 200 + c * 70) % 360;
+    drawCell(ctx, cur.x+c, cur.y, `hsl(${hue},100%,65%)`);
+    // キラキラ縁
+    ctx.fillStyle = `hsl(${(hue+40)%360},100%,82%)`;
+    ctx.fillRect((cur.x+c)*CELL, cur.y*CELL, CELL, 2);
+    ctx.fillRect((cur.x+c)*CELL, (cur.y+1)*CELL-2, CELL, 2);
+  }
+  // キャラクター (ピースの上に描画)
+  const P = Math.max(3, Math.floor(CELL / 4));
+  const charW = 10 * P;
+  const bx = cur.x * CELL + Math.floor((4*CELL - charW) / 2);
+  const by = cur.y * CELL - 10 * P;
+  drawGirl(bx, by);
+  // スパークル
+  for (let i = 0; i < 4; i++) {
+    const sx = (cur.x + i + 0.5) * CELL;
+    const sy = (cur.y + 0.5) * CELL;
+    const sh = (t * 360 + i * 90) % 360;
+    ctx.fillStyle = `hsl(${sh},100%,80%)`;
+    const r = 3;
+    ctx.fillRect(sx-1, sy-r, 2, r*2);
+    ctx.fillRect(sx-r, sy-1, r*2, 2);
+  }
+}
+
+function fxExplosion(cx, cy) {
+  // フラッシュ
+  const f = document.getElementById('flash');
+  f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+  // 強シェイク
+  const w = document.getElementById('board-wrap');
+  w.classList.remove('shake'); void w.offsetWidth; w.classList.add('shake');
+  setTimeout(() => w.classList.remove('shake'), 500);
+  // 大量パーティクル
+  const px = (cx + 0.5) * CELL, py = (cy + 0.5) * CELL;
+  const pc = document.getElementById('particles');
+  const pCols = ['#ffdd00','#ff4400','#ff0088','#00ffcc','#ff88ff','#fff','#ffaa00','#88ffaa'];
+  for (let i = 0; i < 70; i++) {
+    const sp = document.createElement('div');
+    sp.className = 'spark';
+    const angle = (i / 70) * Math.PI * 2;
+    const dist = 70 + Math.random() * 130;
+    const tx = Math.cos(angle) * dist, ty = Math.sin(angle) * dist;
+    const sz = 4 + Math.random() * 6;
+    sp.style.cssText = `
+      left:${px + (Math.random()-0.5)*24}px;
+      top:${py  + (Math.random()-0.5)*24}px;
+      width:${sz}px; height:${sz}px;
+      background:${pCols[i%pCols.length]};
+      --tx:translate(${tx}px,${ty}px);
+      animation:sparkFly ${.5+Math.random()*.5}s ease-out ${Math.random()*.1}s forwards;
+    `;
+    pc.appendChild(sp);
+    setTimeout(() => sp.remove(), 1100);
+  }
+}
+
+function explodeLucky(cx, cy) {
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = cx+dx, ny = cy+dy;
+      if (nx>=0 && nx<COLS && ny>=0 && ny<ROWS) board[ny][nx] = null;
+    }
+  // 残ったLKセルも消去
+  if (cy >= 0 && cy < ROWS)
+    for (let c = 0; c < COLS; c++)
+      if (board[cy][c] === 'LK') board[cy][c] = null;
+}
+
 function render() {
   ctx.fillStyle='rgba(0,2,8,0.52)';
   ctx.fillRect(0,0,boardCanvas.width,boardCanvas.height);
@@ -960,12 +1188,25 @@ function render() {
         ctx.fillRect((cur.x+c)*CELL+1,(gy+r)*CELL+1,CELL-2,CELL-2);
       }
   // current
-  for(let r=0;r<cur.mat.length;r++) for(let c=0;c<cur.mat[r].length;c++)
-    if(cur.mat[r][c]) drawCell(ctx,cur.x+c,cur.y+r,COLORS[cur.name]);
+  if (cur.name === 'LUCKY') {
+    drawLuckyBar();
+  } else {
+    for(let r=0;r<cur.mat.length;r++) for(let c=0;c<cur.mat[r].length;c++)
+      if(cur.mat[r][c]) drawCell(ctx,cur.x+c,cur.y+r,COLORS[cur.name]);
+  }
 }
 
 function renderNext() {
   nctx.clearRect(0,0,nextCanvas.width,nextCanvas.height);
+  if (nxt.name === 'LUCKY') {
+    const h = (Date.now()/8) % 360;
+    nctx.fillStyle = `hsl(${h},100%,65%)`;
+    nctx.font = `bold ${Math.floor(nextCanvas.height*0.72)}px sans-serif`;
+    nctx.textAlign = 'center';
+    nctx.textBaseline = 'middle';
+    nctx.fillText('★', nextCanvas.width/2, nextCanvas.height/2);
+    return;
+  }
   const m=nxt.mat;
   const cs=Math.floor(nextCanvas.width/5);
   const ox=Math.floor((nextCanvas.width  - m[0].length*cs)/2);
@@ -1013,7 +1254,7 @@ function loop(ts) {
 // ============================================================
 function endGame() {
   gameOver=true;
-  stopBGM(); sfxGameOver();
+  stopBGM(); stopLuckyBGM(false); sfxGameOver();
   document.getElementById('ov-score').innerHTML=
     `Score: ${score.toLocaleString()}<br>Level: ${level} &nbsp;Lines: ${lines}`;
   document.getElementById('overlay').classList.remove('hidden');
@@ -1023,8 +1264,10 @@ function togglePause() {
   if(gameOver) return;
   paused=!paused;
   document.getElementById('pause-lbl').classList.toggle('show',paused);
-  if(paused) { stopBGM(); }
-  else { lastTs=null; if(audioReady&&musicOn) startBGM(); }
+  if(paused) { stopBGM(); stopLuckyBGM(false); }
+  else { lastTs=null; if(audioReady&&musicOn) {
+    if (cur && cur.name==='LUCKY') startLuckyBGM(); else startBGM();
+  }}
 }
 
 // ============================================================

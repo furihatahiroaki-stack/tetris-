@@ -27,7 +27,7 @@
       background: #050a10;
     }
 
-    /* ── Soviet cityscape background canvas ── */
+    /* ── World landmarks background canvas ── */
     #bgc {
       position: fixed;
       inset: 0;
@@ -198,6 +198,27 @@
     #cbtn-soft   { grid-column:1; grid-row:2; }
     #cbtn-hard   { grid-column:2/4; grid-row:2; background:rgba(233,69,96,0.13); border-color:rgba(233,69,96,0.28); }
 
+    /* ── Landmark banner ── */
+    #landmark-banner {
+      position: fixed;
+      top: 54px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.72);
+      color: #fff;
+      font-size: 15px;
+      padding: 7px 18px;
+      border-radius: 20px;
+      border: 2px solid #ffe060;
+      z-index: 50;
+      opacity: 0;
+      transition: opacity 0.4s;
+      pointer-events: none;
+      white-space: nowrap;
+      letter-spacing: 1px;
+    }
+    #landmark-banner.show { opacity: 1; }
+
     /* ── Line-clear particle effect ── */
     #particles {
       position: absolute; inset: 0;
@@ -220,6 +241,7 @@
 <body>
 
   <canvas id="bgc"></canvas>
+  <div id="landmark-banner"></div>
 
   <!-- HUD -->
   <div id="hud">
@@ -779,8 +801,7 @@ function init() {
   dropTimer = 0; lastTs = null;
   nxt = randomPiece();
   cur = advance();
-  updateHUD(); updateBG();
-  _bgPh = -1;
+  updateHUD(); updateBG(true);
   document.getElementById('overlay').classList.add('hidden');
   document.getElementById('pause-lbl').classList.remove('show');
   stopBGM(); stopLuckyBGM(false);
@@ -930,194 +951,406 @@ function fxClear(n) {
 }
 
 // ============================================================
-//  SOVIET CITYSCAPE BACKGROUND
+//  WORLD LANDMARKS BACKGROUND
 // ============================================================
-let _bgPh = -1;
+const LANDMARKS = [
+  { label:'日本　富士山' },
+  { label:'フランス　エッフェル塔' },
+  { label:'エジプト　ピラミッド＆スフィンクス' },
+  { label:'アメリカ　自由の女神' },
+  { label:'イタリア　ピサの斜塔' },
+  { label:'中国　万里の長城' },
+  { label:'インド　タージマハル' },
+  { label:'オーストラリア　オペラハウス' },
+  { label:'イギリス　ビッグベン' },
+  { label:'宇宙から見た地球' },
+];
+let _bgIdx = -1;
 
-function getBGPh() {
-  if (score >= 10000) return 4;
-  if (score >= 5000)  return 3;
-  if (score >= 2000)  return 2;
-  if (score >= 600)   return 1;
-  return 0;
+function getLandmarkIdx() { return Math.min(9, Math.floor(score/1000)); }
+
+function showLandmarkBanner(label) {
+  const el=document.getElementById('landmark-banner');
+  if(!el) return;
+  el.textContent=`★ NEW SPOT！ ${label} ★`;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),3800);
 }
 
-function drawSovietBG(force) {
-  const bc = document.getElementById('bgc');
-  const ph = getBGPh();
-  if (!force && ph === _bgPh &&
-      bc.width === window.innerWidth && bc.height === window.innerHeight) return;
-  _bgPh = ph;
-  bc.width  = window.innerWidth;
-  bc.height = window.innerHeight;
-  const gc = bc.getContext('2d');
-  const W = bc.width, H = bc.height;
+function updateBG(force=false) {
+  const idx=getLandmarkIdx();
+  const bc=document.getElementById('bgc');
+  if(!bc) return;
+  const sameSize=bc.width===window.innerWidth&&bc.height===window.innerHeight;
+  if(!force&&idx===_bgIdx&&sameSize) return;
 
-  // ── Sky ──
-  const skyT = ['#6a7b8c','#38495a','#111c28','#080e18','#03060e'][ph];
-  const skyB = ['#96aab6','#5c6e7e','#1c2a38','#0c1420','#060a12'][ph];
-  const skyG = gc.createLinearGradient(0, 0, 0, H * 0.74);
-  skyG.addColorStop(0, skyT); skyG.addColorStop(1, skyB);
-  gc.fillStyle = skyG;
-  gc.fillRect(0, 0, W, H);
-
-  // ── Ground ──
-  const gY = H * 0.76;
-  gc.fillStyle = ['#424a38','#2e3826','#10180e','#080c08','#050808'][ph];
-  gc.fillRect(0, gY, W, H - gY);
-  if (ph >= 2) {
-    const rg = gc.createLinearGradient(0, gY, 0, H);
-    rg.addColorStop(0, `rgba(30,55,90,${(ph-1)*0.07})`);
-    rg.addColorStop(1, 'rgba(0,0,0,0)');
-    gc.fillStyle = rg; gc.fillRect(0, gY, W, H - gY);
+  function drawNew(){
+    bc.width=window.innerWidth; bc.height=window.innerHeight;
+    drawLandmark(idx,bc);
   }
 
-  // ── Clouds (ph 0-1) ──
-  if (ph <= 1) {
-    gc.fillStyle = `rgba(185,198,210,${ph===0?0.24:0.11})`;
-    [[0.08,0.12,0.14,0.042],[0.33,0.09,0.12,0.036],
-     [0.60,0.15,0.13,0.040],[0.83,0.10,0.09,0.032]].forEach(([cx,cy,rx,ry])=>{
-      gc.beginPath();
-      gc.ellipse(cx*W, cy*H, rx*W, ry*H, 0, 0, Math.PI*2);
-      gc.fill();
-    });
+  if(_bgIdx<0||force||idx===_bgIdx){
+    const prev=_bgIdx; _bgIdx=idx;
+    drawNew();
+    bc.style.transition='none'; bc.style.opacity='0.88';
+    return;
   }
 
-  // ── Stars (ph 2+) ──
-  if (ph >= 2) {
-    gc.fillStyle = `rgba(255,255,255,${0.38+ph*0.09})`;
-    [0.12,0.78,0.34,0.56,0.89,0.23,0.67,0.45,0.91,0.15,0.72,0.38,0.60,0.05,0.84]
-      .forEach((sx,i)=>{ gc.fillRect(sx*W, (0.03+i*0.047%0.62)*H*0.72, 1.5, 1.5); });
+  const prevIdx=_bgIdx; _bgIdx=idx;
+  bc.style.transition='opacity 0.35s ease-out';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ bc.style.opacity='0'; }));
+  bc.addEventListener('transitionend',function onEnd(e){
+    if(e.propertyName!=='opacity') return;
+    bc.removeEventListener('transitionend',onEnd);
+    drawNew();
+    bc.style.transition='opacity 0.55s ease-in';
+    bc.style.opacity='0.88';
+    showLandmarkBanner(LANDMARKS[idx].label);
+  });
+}
+
+function drawLandmark(idx,bc){
+  const gc=bc.getContext('2d'),W=bc.width,H=bc.height;
+  [drawFuji,drawEiffel,drawPyramids,drawLiberty,drawPisa,
+   drawGreatWall,drawTajMahal,drawOperaHouse,drawBigBen,drawEarth][idx]?.(gc,W,H);
+}
+
+/* ---- 0: 富士山 (日本) ---- */
+function drawFuji(gc,W,H){
+  const g=gc.createLinearGradient(0,0,0,H*.68);
+  g.addColorStop(0,'#5aaae8'); g.addColorStop(1,'#b8e4f8');
+  gc.fillStyle=g; gc.fillRect(0,0,W,H);
+  gc.fillStyle='rgba(255,230,80,.22)'; gc.beginPath(); gc.arc(W*.78,H*.1,W*.12,0,Math.PI*2); gc.fill();
+  gc.fillStyle='#ffe566'; gc.beginPath(); gc.arc(W*.78,H*.1,W*.065,0,Math.PI*2); gc.fill();
+  [[.1,.2,.09,.05],[.52,.17,.07,.04],[.8,.23,.06,.035]].forEach(([cx,cy,rx,ry])=>{
+    gc.fillStyle='rgba(255,255,255,.82)';
+    gc.beginPath(); gc.ellipse(cx*W,cy*H,rx*W,ry*H,0,0,Math.PI*2); gc.fill();
+  });
+  gc.fillStyle='#4aaa5a'; gc.fillRect(0,H*.68,W,H*.32);
+  gc.fillStyle='#7090b8';
+  gc.beginPath(); gc.moveTo(W*.5,H*.06); gc.lineTo(W*.01,H*.68); gc.lineTo(W*.99,H*.68); gc.closePath(); gc.fill();
+  gc.fillStyle='#eef5ff';
+  gc.beginPath(); gc.moveTo(W*.5,H*.06); gc.lineTo(W*.33,H*.30); gc.lineTo(W*.67,H*.30); gc.closePath(); gc.fill();
+  gc.fillStyle='rgba(140,170,200,.5)';
+  gc.beginPath(); gc.moveTo(W*.5,H*.11); gc.lineTo(W*.33,H*.30); gc.lineTo(W*.48,H*.27); gc.closePath(); gc.fill();
+  [[.08,.64],[.16,.62],[.76,.63],[.86,.64]].forEach(([x,y])=>{
+    gc.fillStyle='#7a4a20'; gc.fillRect(x*W-3,y*H,5,H*.06);
+    gc.fillStyle='#ffaac8'; gc.beginPath(); gc.arc(x*W,y*H,W*.035,0,Math.PI*2); gc.fill();
+  });
+  gc.fillStyle='#cc3310';
+  gc.fillRect(W*.412,H*.675-H*.09,W*.176,H*.008);
+  gc.fillRect(W*.422,H*.675-H*.076,W*.156,H*.005);
+  gc.fillRect(W*.432,H*.675-H*.09,W*.016,H*.09);
+  gc.fillRect(W*.552,H*.675-H*.09,W*.016,H*.09);
+}
+
+/* ---- 1: エッフェル塔 (フランス) ---- */
+function drawEiffel(gc,W,H){
+  const sky=gc.createLinearGradient(0,0,0,H*.72);
+  sky.addColorStop(0,'#0e0e5e'); sky.addColorStop(.55,'#c03808'); sky.addColorStop(1,'#f0b020');
+  gc.fillStyle=sky; gc.fillRect(0,0,W,H);
+  for(let i=0;i<20;i++){
+    gc.fillStyle='rgba(255,255,210,.75)';
+    gc.fillRect((Math.sin(i*7.3)*.5+.5)*W,(Math.sin(i*3.1)*.28+.04)*H*.65,i%3?1:2,i%3?1:2);
   }
+  gc.fillStyle='#fff5cc'; gc.beginPath(); gc.arc(W*.22,H*.08,W*.038,0,Math.PI*2); gc.fill();
+  gc.fillStyle='#1a3510'; gc.fillRect(0,H*.72,W,H*.28);
+  gc.fillStyle='rgba(20,50,130,.55)'; gc.fillRect(0,H*.79,W,H*.055);
+  const tx=W*.5,by=H*.72;
+  gc.fillStyle='#3a2808';
+  gc.beginPath(); gc.moveTo(tx-W*.2,by);
+  gc.quadraticCurveTo(tx-W*.12,by-H*.18,tx-W*.025,by-H*.38);
+  gc.lineTo(tx-W*.012,by-H*.38);
+  gc.quadraticCurveTo(tx-W*.085,by-H*.18,tx-W*.15,by);
+  gc.closePath(); gc.fill();
+  gc.beginPath(); gc.moveTo(tx+W*.2,by);
+  gc.quadraticCurveTo(tx+W*.12,by-H*.18,tx+W*.025,by-H*.38);
+  gc.lineTo(tx+W*.012,by-H*.38);
+  gc.quadraticCurveTo(tx+W*.085,by-H*.18,tx+W*.15,by);
+  gc.closePath(); gc.fill();
+  gc.fillRect(tx-W*.115,by-H*.33,W*.23,H*.018);
+  gc.beginPath(); gc.moveTo(tx-W*.072,by-H*.33); gc.lineTo(tx-W*.025,by-H*.56);
+  gc.lineTo(tx+W*.025,by-H*.56); gc.lineTo(tx+W*.072,by-H*.33); gc.closePath(); gc.fill();
+  gc.fillRect(tx-W*.06,by-H*.53,W*.12,H*.015);
+  gc.beginPath(); gc.moveTo(tx-W*.028,by-H*.53); gc.lineTo(tx,by-H*.73);
+  gc.lineTo(tx+W*.028,by-H*.53); gc.closePath(); gc.fill();
+  gc.fillRect(tx-1.5,by-H*.77,3,H*.045);
+  gc.fillStyle='#ffe060'; gc.beginPath(); gc.arc(tx,by-H*.77,4,0,Math.PI*2); gc.fill();
+}
 
-  // ── Building layers (back → front) ──
-  const layers = [
-    { n:10, minF:10, maxF:14, sc:0.52, dy:-0.02, al:0.62 },
-    { n:7,  minF:7,  maxF:11, sc:0.72, dy: 0.00, al:0.82 },
-    { n:5,  minF:5,  maxF:9,  sc:1.00, dy: 0.04, al:1.00 },
-  ];
+/* ---- 2: ピラミッド＆スフィンクス (エジプト) ---- */
+function drawPyramids(gc,W,H){
+  const sky=gc.createLinearGradient(0,0,0,H*.62);
+  sky.addColorStop(0,'#e85a30'); sky.addColorStop(.5,'#f0a020'); sky.addColorStop(1,'#f5cc50');
+  gc.fillStyle=sky; gc.fillRect(0,0,W,H);
+  gc.fillStyle='rgba(240,170,20,.35)'; gc.beginPath(); gc.arc(W*.72,H*.1,W*.12,0,Math.PI*2); gc.fill();
+  gc.fillStyle='#f5c800'; gc.beginPath(); gc.arc(W*.72,H*.1,W*.07,0,Math.PI*2); gc.fill();
+  const sand=gc.createLinearGradient(0,H*.62,0,H);
+  sand.addColorStop(0,'#e8c870'); sand.addColorStop(1,'#b89040');
+  gc.fillStyle=sand; gc.fillRect(0,H*.62,W,H*.38);
+  gc.fillStyle='#d4aa50';
+  gc.beginPath(); gc.moveTo(0,H*.68);
+  gc.quadraticCurveTo(W*.22,H*.62,W*.42,H*.70);
+  gc.quadraticCurveTo(W*.62,H*.64,W*.82,H*.71);
+  gc.lineTo(W,H*.70); gc.lineTo(W,H); gc.lineTo(0,H); gc.closePath(); gc.fill();
+  [[.58,.52,.56],[.28,.32,.38],[.07,.20,.26]].forEach(([x,w,h])=>{
+    gc.fillStyle='#c8a030';
+    gc.beginPath(); gc.moveTo(x*W,H*.62-h*H*.54); gc.lineTo((x-w/2)*W,H*.62); gc.lineTo((x+w/2)*W,H*.62); gc.closePath(); gc.fill();
+    gc.fillStyle='rgba(0,0,0,.22)';
+    gc.beginPath(); gc.moveTo(x*W,H*.62-h*H*.54); gc.lineTo(x*W,H*.62); gc.lineTo((x+w/2)*W,H*.62); gc.closePath(); gc.fill();
+    gc.fillStyle='rgba(255,220,100,.22)';
+    gc.beginPath(); gc.moveTo(x*W,H*.62-h*H*.54); gc.lineTo((x-w/2)*W,H*.62); gc.lineTo(x*W,H*.62); gc.closePath(); gc.fill();
+  });
+  gc.fillStyle='#d4aa40'; gc.fillRect(W*.1,H*.57,W*.14,H*.068);
+  gc.beginPath(); gc.arc(W*.24,H*.55,W*.044,0,Math.PI*2); gc.fill();
+  gc.fillStyle='#e8c860'; gc.fillRect(W*.21,H*.51,W*.065,H*.052);
+  gc.fillStyle='rgba(0,80,160,.3)'; gc.fillRect(W*.21,H*.515,W*.065,H*.007);
+}
 
-  // Wall RGB per phase [bright side, dark side]
-  const wallRGB = [
-    [[118,130,140],[96,108,118]],
-    [[72,86,96],[52,66,76]],
-    [[20,30,40],[12,20,30]],
-    [[8,14,24],[4,9,18]],
-    [[4,8,16],[2,5,12]],
-  ];
+/* ---- 3: 自由の女神 (アメリカ) ---- */
+function drawLiberty(gc,W,H){
+  const sky=gc.createLinearGradient(0,0,0,H*.72);
+  sky.addColorStop(0,'#5ab8f8'); sky.addColorStop(1,'#b0dcf8');
+  gc.fillStyle=sky; gc.fillRect(0,0,W,H);
+  [[.15,.18,.09,.05],[.65,.12,.1,.055],[.86,.22,.07,.04]].forEach(([cx,cy,rx,ry])=>{
+    gc.fillStyle='rgba(255,255,255,.88)';
+    gc.beginPath(); gc.ellipse(cx*W,cy*H,rx*W,ry*H,0,0,Math.PI*2); gc.fill();
+  });
+  const sea=gc.createLinearGradient(0,H*.72,0,H);
+  sea.addColorStop(0,'#1a70c8'); sea.addColorStop(1,'#0a4898');
+  gc.fillStyle=sea; gc.fillRect(0,H*.72,W,H*.28);
+  gc.strokeStyle='rgba(120,200,255,.3)'; gc.lineWidth=2;
+  for(let i=0;i<4;i++){
+    gc.beginPath();
+    for(let x=0;x<=W;x+=8) gc.lineTo(x,H*.75+i*H*.04+Math.sin(x*.04)*5);
+    gc.stroke();
+  }
+  gc.fillStyle='#c0b090'; gc.fillRect(W*.4,H*.62,W*.2,H*.12);
+  gc.fillRect(W*.44,H*.57,W*.12,H*.06);
+  gc.fillStyle='#4aaa88';
+  gc.beginPath(); gc.moveTo(W*.44,H*.57); gc.lineTo(W*.37,H*.36); gc.lineTo(W*.63,H*.36); gc.lineTo(W*.56,H*.57); gc.closePath(); gc.fill();
+  gc.beginPath(); gc.arc(W*.5,H*.28,W*.052,0,Math.PI*2); gc.fill();
+  for(let i=-2;i<=2;i++) gc.fillRect(W*.5+i*W*.018-2,H*.22-Math.abs(i)*H*.006,4,H*.055);
+  gc.beginPath(); gc.moveTo(W*.61,H*.40); gc.lineTo(W*.70,H*.27); gc.lineWidth=7; gc.strokeStyle='#4aaa88'; gc.stroke();
+  gc.fillStyle='#ffe060'; gc.beginPath(); gc.arc(W*.705,H*.25,W*.018,0,Math.PI*2); gc.fill();
+  gc.fillStyle='rgba(255,200,50,.3)'; gc.beginPath(); gc.arc(W*.705,H*.25,W*.036,0,Math.PI*2); gc.fill();
+}
 
-  for (let li = 0; li < 3; li++) {
-    const { n, minF, maxF, sc, dy, al } = layers[li];
-    const bw = (W / n) * 0.90;
-    const flH = 22 * sc;
-
-    for (let bi = 0; bi < n; bi++) {
-      const seed  = li * 200 + bi * 17;
-      const floors = minF + (seed % (maxF - minF + 1));
-      const bh    = floors * flH;
-      const bx    = (W / n) * bi + li * 3;
-      const by    = gY + dy * H - bh;
-
-      // Wall gradient
-      const [wr,wg,wb] = wallRGB[ph][0];
-      const [dr,dg,db] = wallRGB[ph][1];
-      const wG = gc.createLinearGradient(bx, by, bx+bw, by);
-      wG.addColorStop(0,   `rgba(${wr},${wg},${wb},${al})`);
-      wG.addColorStop(0.5, `rgba(${dr},${dg},${db},${al})`);
-      wG.addColorStop(1,   `rgba(${wr},${wg},${wb},${al})`);
-      gc.fillStyle = wG;
-      gc.fillRect(bx, by, bw, bh);
-
-      // Roof ledge
-      gc.fillStyle = `rgba(${wr+20},${wg+20},${wb+20},${al})`;
-      gc.fillRect(bx-2, by-3, bw+4, 4);
-
-      // Floor dividers
-      if (li >= 1) {
-        gc.fillStyle = `rgba(0,0,0,${al*0.15})`;
-        for (let row = 1; row < floors; row++)
-          gc.fillRect(bx, by + row*flH, bw, 1);
-      }
-
-      // Windows
-      const winW = Math.max(4, Math.round(9*sc));
-      const winH = Math.max(3, Math.round(7*sc));
-      const gapX = Math.max(2, Math.round(5*sc));
-      const gapY = Math.round(flH * 0.28);
-      const cols = Math.max(2, Math.floor((bw-gapX*1.5)/(winW+gapX)));
-      const padX = (bw - cols*(winW+gapX) + gapX) * 0.5;
-      const darkTh = [22,28,40,50,55][ph];
-
-      for (let row = 0; row < floors; row++) {
-        for (let col = 0; col < cols; col++) {
-          const wx = bx + padX + col*(winW+gapX);
-          const wy = by + row*flH + gapY;
-          const ws = (seed + row*19 + col*37) % 100;
-
-          if (ws <= darkTh) {
-            gc.fillStyle = `rgba(6,10,14,${al*0.9})`;
-            gc.fillRect(wx, wy, winW, winH);
-            continue;
-          }
-
-          let wc;
-          if (ph === 0) {
-            wc = `rgba(255,242,195,${0.82*al})`;
-          } else if (ph === 1) {
-            wc = ws%3===0 ? `rgba(255,215,130,${0.78*al})` : `rgba(255,238,185,${0.82*al})`;
-          } else if (ph === 2) {
-            wc = `rgba(255,224,138,${0.88*al})`;
-          } else if (ph === 3) {
-            const nc = ['rgba(255,80,40,','rgba(40,195,255,','rgba(255,235,70,','rgba(195,40,255,','rgba(40,255,175,'];
-            wc = nc[ws%nc.length]+al+')';
-          } else {
-            const nc = ['rgba(255,0,80,','rgba(0,255,195,','rgba(255,38,0,','rgba(120,0,255,','rgba(0,175,255,'];
-            wc = nc[ws%nc.length]+al+')';
-          }
-
-          // Soft glow for foreground night windows
-          if (ph >= 3 && li === 2) {
-            gc.fillStyle = wc.replace(/[\d.]+\)$/,'0.16)');
-            gc.fillRect(wx-2, wy-2, winW+4, winH+4);
-          }
-          gc.fillStyle = wc;
-          gc.fillRect(wx, wy, winW, winH);
-        }
-      }
-
-      // Balconies (foreground, daytime)
-      if (li === 2 && ph <= 1) {
-        for (let row = 0; row < floors; row++) {
-          if ((seed+row)%3 !== 0) continue;
-          gc.fillStyle = `rgba(100,112,118,${al*0.60})`;
-          gc.fillRect(bx+2, by+row*flH+flH*0.68, bw-4, Math.max(2, Math.round(sc*3)));
-        }
-      }
+/* ---- 4: ピサの斜塔 (イタリア) ---- */
+function drawPisa(gc,W,H){
+  const sky=gc.createLinearGradient(0,0,0,H*.72);
+  sky.addColorStop(0,'#6ecff6'); sky.addColorStop(1,'#c0e8f8');
+  gc.fillStyle=sky; gc.fillRect(0,0,W,H);
+  [[.2,.15,.08,.045],[.72,.12,.09,.05]].forEach(([cx,cy,rx,ry])=>{
+    gc.fillStyle='rgba(255,255,255,.88)';
+    gc.beginPath(); gc.ellipse(cx*W,cy*H,rx*W,ry*H,0,0,Math.PI*2); gc.fill();
+  });
+  gc.fillStyle='#50b050'; gc.fillRect(0,H*.72,W,H*.28);
+  gc.fillStyle='#68c068'; gc.fillRect(0,H*.72,W,H*.016);
+  gc.save();
+  gc.translate(W*.5,H*.72);
+  gc.rotate(0.088);
+  const tw=W*.14, th=H*.60;
+  for(let i=7;i>=0;i--){
+    const fy=-i*(th/8);
+    const fw=tw*(1-i*.01);
+    gc.fillStyle=i===7?'#f5f0e5':(i%2===0?'#f0eadc':'#e8e2d0');
+    gc.fillRect(-fw/2,fy-th/8,fw,th/8);
+    if(i<7){
+      gc.fillStyle='rgba(60,50,40,.13)';
+      const cols=5, cw=fw/cols;
+      for(let c=0;c<cols;c++) gc.fillRect(-fw/2+c*cw+cw*.18,fy-th/8+3,cw*.62,th/8-6);
     }
   }
-
-  // ── Neon signs (ph 3-4) ──
-  if (ph >= 3) {
-    const na = ph===3 ? 0.72 : 1.0;
-    [{ x:.11,y:.695,w:.076,h:.026,c:'#ff0055' },
-     { x:.37,y:.662,w:.063,h:.022,c:'#00ffcc' },
-     { x:.63,y:.712,w:.082,h:.028,c:'#ff4400' },
-     { x:.84,y:.674,w:.055,h:.020,c:'#9900ff' }]
-    .forEach(({ x,y,w,h,c })=>{
-      gc.save();
-      gc.globalAlpha = na;
-      gc.shadowBlur = 22; gc.shadowColor = c;
-      gc.fillStyle = c;
-      gc.fillRect(x*W, y*H, w*W, h*H);
-      gc.shadowBlur = 5;
-      gc.fillStyle = 'rgba(255,255,255,0.88)';
-      gc.fillRect(x*W+1, y*H+1, w*W-2, h*H-2);
-      gc.restore();
-    });
-  }
+  gc.fillStyle='#e8e2d0';
+  gc.beginPath(); gc.arc(0,-th+th*.04,tw*.42,Math.PI,0); gc.fill();
+  gc.fillRect(-tw*.42,-th+th*.04,tw*.84,H*.015);
+  gc.restore();
 }
 
-function updateBG() { drawSovietBG(); }
+/* ---- 5: 万里の長城 (中国) ---- */
+function drawGreatWall(gc,W,H){
+  const sky=gc.createLinearGradient(0,0,0,H*.65);
+  sky.addColorStop(0,'#4a8ac8'); sky.addColorStop(1,'#8ec4e8');
+  gc.fillStyle=sky; gc.fillRect(0,0,W,H);
+  [[.1,.14,.09,.05],[.5,.1,.11,.06],[.82,.18,.07,.04]].forEach(([cx,cy,rx,ry])=>{
+    gc.fillStyle='rgba(255,255,255,.85)';
+    gc.beginPath(); gc.ellipse(cx*W,cy*H,rx*W,ry*H,0,0,Math.PI*2); gc.fill();
+  });
+  const mtnPts=[
+    {c:'#6a9060',y:[.72,.48,.58,.42,.52,.36,.65,.44,.78]},
+    {c:'#4a7040',y:[.78,.60,.65,.50,.62,.46,.58,.62,.72]},
+    {c:'#3a5830',y:[.82,.66,.70,.62,.68,.58,.64,.70,.78]},
+  ];
+  const mx=[0,.12,.25,.38,.5,.62,.75,.88,1];
+  mtnPts.forEach(({c,y})=>{
+    gc.fillStyle=c;
+    gc.beginPath(); gc.moveTo(0,H);
+    mx.forEach((x,i)=>gc.lineTo(x*W,y[i]*H));
+    gc.lineTo(W,H); gc.closePath(); gc.fill();
+  });
+  const wy=[.48,.58,.42,.52,.36,.65,.44], wx=[.12,.25,.38,.5,.62,.75,.88];
+  gc.fillStyle='#9a8060';
+  gc.beginPath(); gc.moveTo(0,H*.69);
+  wx.forEach((x,i)=>gc.lineTo(x*W,(wy[i]-0.03)*H));
+  gc.lineTo(W,H*.75);
+  gc.lineTo(W,H*.765);
+  wx.slice().reverse().forEach((x,i)=>gc.lineTo(x*W,(wy[6-i]+0.012)*H));
+  gc.lineTo(0,H*.705); gc.closePath(); gc.fill();
+  gc.fillStyle='#b09070';
+  wx.forEach((x,i)=>gc.fillRect(x*W-W*.009,(wy[i]-0.058)*H,W*.018,H*.028));
+  gc.fillStyle='#9a8060';
+  [[.12,.48],[.38,.42],[.62,.36],[.88,.44]].forEach(([x,y])=>{
+    gc.fillRect(x*W-W*.025,(y-.068)*H,W*.05,H*.072);
+    gc.fillRect(x*W-W*.032,(y-.074)*H,W*.064,H*.013);
+  });
+}
+
+/* ---- 6: タージマハル (インド) ---- */
+function drawTajMahal(gc,W,H){
+  const sky=gc.createLinearGradient(0,0,0,H*.7);
+  sky.addColorStop(0,'#e87830'); sky.addColorStop(.5,'#f5b070'); sky.addColorStop(1,'#f8d890');
+  gc.fillStyle=sky; gc.fillRect(0,0,W,H);
+  gc.fillStyle='#4aa868'; gc.fillRect(0,H*.7,W,H*.3);
+  gc.fillStyle='rgba(90,150,210,.55)'; gc.fillRect(W*.32,H*.72,W*.36,H*.18);
+  gc.fillStyle='rgba(255,255,255,.22)'; gc.fillRect(W*.32,H*.72,W*.36,H*.004);
+  gc.fillStyle='#f4f0e8'; gc.fillRect(W*.3,H*.54,W*.4,H*.17);
+  gc.fillStyle='#f8f4ec';
+  gc.beginPath(); gc.arc(W*.5,H*.54,W*.1,Math.PI,0,false); gc.fill();
+  gc.beginPath(); gc.arc(W*.5,H*.54,W*.065,Math.PI,0,false); gc.fill();
+  gc.fillStyle='#d4c070'; gc.fillRect(W*.498,H*.40,4,H*.06);
+  gc.beginPath(); gc.arc(W*.5,H*.40,7,0,Math.PI*2); gc.fill();
+  [[.3,.06],[.38,.06],[.62,.06],[.7,.06]].forEach(([x])=>{
+    gc.fillStyle='#f0ece0'; gc.fillRect(x*W-W*.018,H*.43,W*.036,H*.12);
+    gc.fillStyle='#f4f0e8'; gc.beginPath(); gc.arc(x*W,H*.43,W*.02,Math.PI,0); gc.fill();
+    gc.fillStyle='#d4c070'; gc.beginPath(); gc.arc(x*W,H*.42,6,0,Math.PI*2); gc.fill();
+    gc.fillStyle='rgba(0,0,0,.08)';
+    gc.fillRect(x*W-W*.026,H*.49,W*.052,H*.005);
+    gc.fillRect(x*W-W*.026,H*.52,W*.052,H*.005);
+  });
+  gc.fillStyle='rgba(160,140,110,.35)';
+  gc.beginPath(); gc.arc(W*.5,H*.64,W*.072,Math.PI,0); gc.fill();
+  gc.fillRect(W*.428,H*.64,W*.144,H*.07);
+  [.38,.62].forEach(x=>{
+    gc.beginPath(); gc.arc(x*W,H*.64,W*.048,Math.PI,0); gc.fill();
+    gc.fillRect(x*W-W*.048,H*.64,W*.096,H*.07);
+  });
+}
+
+/* ---- 7: オペラハウス (オーストラリア) ---- */
+function drawOperaHouse(gc,W,H){
+  const sky=gc.createLinearGradient(0,0,0,H*.68);
+  sky.addColorStop(0,'#1898e0'); sky.addColorStop(1,'#68d0f0');
+  gc.fillStyle=sky; gc.fillRect(0,0,W,H);
+  gc.fillStyle='rgba(255,230,60,.22)'; gc.beginPath(); gc.arc(W*.82,H*.12,W*.1,0,Math.PI*2); gc.fill();
+  gc.fillStyle='#ffe566'; gc.beginPath(); gc.arc(W*.82,H*.12,W*.055,0,Math.PI*2); gc.fill();
+  [[.12,.14,.09,.05],[.5,.1,.11,.06]].forEach(([cx,cy,rx,ry])=>{
+    gc.fillStyle='rgba(255,255,255,.88)';
+    gc.beginPath(); gc.ellipse(cx*W,cy*H,rx*W,ry*H,0,0,Math.PI*2); gc.fill();
+  });
+  const sea=gc.createLinearGradient(0,H*.68,0,H);
+  sea.addColorStop(0,'#1880d8'); sea.addColorStop(1,'#0a56a0');
+  gc.fillStyle=sea; gc.fillRect(0,H*.68,W,H*.32);
+  gc.strokeStyle='#5a5a70'; gc.lineWidth=5;
+  gc.beginPath(); gc.arc(W*.25,H*.6,W*.22,Math.PI*.18,Math.PI*.82); gc.stroke();
+  gc.strokeStyle='#4a4a60'; gc.lineWidth=3;
+  gc.beginPath(); gc.moveTo(W*.04,H*.66); gc.lineTo(W*.46,H*.66); gc.stroke();
+  gc.fillStyle='#8a9088'; gc.fillRect(W*.38,H*.68,W*.48,H*.025);
+  [[.58,.28,W*.19],[.67,.21,W*.145],[.76,.16,W*.108]].forEach(([cx,h,rw],i)=>{
+    gc.fillStyle=i===0?'#f5f0e5':'#eee8d8';
+    gc.beginPath();
+    gc.moveTo(cx*W-rw*.55,H*.705);
+    gc.quadraticCurveTo(cx*W-rw*.2,H*.705-h*H,cx*W,H*.705-h*H);
+    gc.quadraticCurveTo(cx*W+rw*.2,H*.705-h*H,cx*W+rw*.55,H*.705);
+    gc.closePath(); gc.fill();
+    gc.strokeStyle='rgba(100,90,70,.22)'; gc.lineWidth=1.5; gc.stroke();
+  });
+  [[.62,.1,W*.065],[.7,.075,W*.05]].forEach(([cx,h,rw])=>{
+    gc.fillStyle='#e8e2d0';
+    gc.beginPath();
+    gc.moveTo(cx*W-rw,H*.705);
+    gc.quadraticCurveTo(cx*W-rw*.3,H*.705-h*H,cx*W,H*.705-h*H);
+    gc.quadraticCurveTo(cx*W+rw*.3,H*.705-h*H,cx*W+rw,H*.705);
+    gc.closePath(); gc.fill();
+  });
+}
+
+/* ---- 8: ビッグベン (イギリス) ---- */
+function drawBigBen(gc,W,H){
+  const sky=gc.createLinearGradient(0,0,0,H*.72);
+  sky.addColorStop(0,'#283050'); sky.addColorStop(.6,'#7888b8'); sky.addColorStop(1,'#a8b8d8');
+  gc.fillStyle=sky; gc.fillRect(0,0,W,H);
+  gc.fillStyle='rgba(255,245,200,.88)'; gc.beginPath(); gc.arc(W*.18,H*.1,W*.048,0,Math.PI*2); gc.fill();
+  [[.45,.17,.12,.06],[.72,.12,.09,.05]].forEach(([cx,cy,rx,ry])=>{
+    gc.fillStyle='rgba(100,110,140,.55)';
+    gc.beginPath(); gc.ellipse(cx*W,cy*H,rx*W,ry*H,0,0,Math.PI*2); gc.fill();
+  });
+  const riv=gc.createLinearGradient(0,H*.72,0,H);
+  riv.addColorStop(0,'#2a4878'); riv.addColorStop(1,'#18305a');
+  gc.fillStyle=riv; gc.fillRect(0,H*.72,W,H*.28);
+  gc.fillStyle='#3a3a4a'; gc.fillRect(W*.04,H*.60,W*.40,H*.12);
+  gc.fillStyle='#323244'; gc.fillRect(W*.16,H*.55,W*.18,H*.06);
+  const tx=W*.52, base=H*.72, tH=H*.66;
+  gc.fillStyle='#504838'; gc.fillRect(tx-W*.075,base-tH,W*.15,tH);
+  gc.fillStyle='#403828';
+  gc.fillRect(tx-W*.09,base-tH*1.02,W*.18,H*.01);
+  gc.fillRect(tx-W*.082,base-tH*.80,W*.164,H*.007);
+  gc.fillRect(tx-W*.076,base-tH*.60,W*.152,H*.006);
+  gc.fillStyle='#6a5840'; gc.fillRect(tx-W*.088,base-tH*.88,W*.176,tH*.18);
+  gc.fillStyle='#c8f0c0'; gc.beginPath(); gc.arc(tx,base-tH*.80,W*.064,0,Math.PI*2); gc.fill();
+  gc.strokeStyle='#485838'; gc.lineWidth=3;
+  gc.beginPath(); gc.arc(tx,base-tH*.80,W*.064,0,Math.PI*2); gc.stroke();
+  for(let i=0;i<12;i++){
+    const a=i/12*Math.PI*2-Math.PI/2;
+    gc.fillStyle='#405028';
+    gc.fillRect(tx+Math.cos(a)*W*.054-1.5,base-tH*.80+Math.sin(a)*W*.054-1.5,3,3);
+  }
+  gc.strokeStyle='#182010'; gc.lineWidth=2.5;
+  gc.beginPath(); gc.moveTo(tx,base-tH*.80); gc.lineTo(tx+W*.035,base-tH*.83); gc.stroke();
+  gc.beginPath(); gc.moveTo(tx,base-tH*.80); gc.lineTo(tx-W*.02,base-tH*.77); gc.stroke();
+  gc.fillStyle='#5a5040';
+  gc.beginPath(); gc.moveTo(tx-W*.032,base-tH*.72); gc.lineTo(tx,base-tH); gc.lineTo(tx+W*.032,base-tH*.72); gc.closePath(); gc.fill();
+  gc.fillRect(tx-1.5,base-tH-H*.02,3,H*.02);
+  gc.fillStyle='#cc1122'; gc.fillRect(tx+1.5,base-tH-H*.02,W*.022,H*.012);
+}
+
+/* ---- 9: 宇宙から見た地球 ---- */
+function drawEarth(gc,W,H){
+  gc.fillStyle='#000008'; gc.fillRect(0,0,W,H);
+  for(let i=0;i<150;i++){
+    const sx=(Math.sin(i*5.7)*.5+.5)*W, sy=(Math.sin(i*3.1)*.5+.5)*H;
+    const br=.4+Math.sin(i*11.3)*.4;
+    gc.fillStyle=`rgba(255,255,240,${Math.max(.1,br)})`;
+    gc.fillRect(sx,sy,i%7===0?2:1,i%7===0?2:1);
+  }
+  gc.fillStyle='rgba(120,110,180,.06)'; gc.fillRect(0,H*.2,W,H*.6);
+  const ex=W*.5, ey=H*.46, er=Math.min(W,H)*.34;
+  gc.save();
+  gc.beginPath(); gc.arc(ex,ey,er,0,Math.PI*2); gc.clip();
+  const ocean=gc.createRadialGradient(ex-er*.25,ey-er*.25,er*.05,ex,ey,er);
+  ocean.addColorStop(0,'#4ab0f8'); ocean.addColorStop(.5,'#1870d0'); ocean.addColorStop(1,'#083888');
+  gc.fillStyle=ocean; gc.fillRect(ex-er,ey-er,er*2,er*2);
+  gc.fillStyle='#4aaa48';
+  gc.beginPath(); gc.ellipse(ex+er*.14,ey-er*.12,er*.36,er*.22,-.18,0,Math.PI*2); gc.fill();
+  gc.beginPath(); gc.ellipse(ex+er*.06,ey+er*.22,er*.17,er*.26,.08,0,Math.PI*2); gc.fill();
+  gc.fillStyle='#3a9a38';
+  gc.beginPath(); gc.ellipse(ex-er*.32,ey,er*.15,er*.30,-.12,0,Math.PI*2); gc.fill();
+  gc.beginPath(); gc.ellipse(ex+er*.36,ey+er*.24,er*.12,er*.09,.18,0,Math.PI*2); gc.fill();
+  gc.fillStyle='rgba(240,250,255,.92)';
+  gc.beginPath(); gc.ellipse(ex,ey-er*.74,er*.26,er*.13,0,0,Math.PI*2); gc.fill();
+  gc.beginPath(); gc.ellipse(ex,ey+er*.76,er*.2,er*.1,0,0,Math.PI*2); gc.fill();
+  gc.fillStyle='rgba(255,255,255,.24)';
+  [[-.2,-.28,.4,.09],[.08,-.08,.28,.07],[-.28,.12,.32,.08],[.22,.26,.38,.09]].forEach(([dx,dy,rw,rh])=>{
+    gc.beginPath(); gc.ellipse(ex+dx*er,ey+dy*er,rw*er,rh*er,dx*.4,0,Math.PI*2); gc.fill();
+  });
+  gc.restore();
+  const atmo=gc.createRadialGradient(ex,ey,er*.92,ex,ey,er*1.18);
+  atmo.addColorStop(0,'rgba(80,170,255,.2)'); atmo.addColorStop(1,'rgba(40,100,220,0)');
+  gc.fillStyle=atmo; gc.beginPath(); gc.arc(ex,ey,er*1.18,0,Math.PI*2); gc.fill();
+  gc.fillStyle='rgba(255,255,255,.1)';
+  gc.beginPath(); gc.ellipse(ex-er*.22,ey-er*.28,er*.18,er*.14,-.4,0,Math.PI*2); gc.fill();
+}
+
 
 // ============================================================
 //  DRAWING
@@ -1427,7 +1660,7 @@ document.addEventListener('visibilitychange', ()=>{
 //  START
 // ============================================================
 calcLayout();
-window.addEventListener('resize', () => { calcLayout(); drawSovietBG(true); });
+window.addEventListener('resize', () => { calcLayout(); updateBG(true); });
 init();
 </script>
 </body>

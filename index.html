@@ -890,11 +890,13 @@ function lock() {
   }
   clearLines();
   cur = advance();
-  if (cur.name === 'LUCKY') {
-    stopLuckyBGM(false);
-    startLuckyBGM();
+  if (isLucky) {
+    // ラッキー棒設置後：次のピースに応じてBGM切替
+    if (cur.name === 'LUCKY') { stopLuckyBGM(false); startLuckyBGM(); }
+    else stopLuckyBGM(true); // コロブチカ再開
   } else {
-    stopLuckyBGM(true); // resume regular BGM
+    // 通常ピース設置：次がラッキー棒なら切替、それ以外はBGMに触らない
+    if (cur.name === 'LUCKY') startLuckyBGM();
   }
   if(hits(cur.mat,cur.x,cur.y)) endGame();
 }

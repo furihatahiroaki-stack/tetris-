@@ -247,11 +247,36 @@
       70%  { opacity:.9; }
       100% { opacity:0; transform:translate(var(--fwx),var(--fwy)) scale(0); }
     }
+    /* ── Ambient fireworks ── */
+    #fw-layer {
+      position:fixed; inset:0;
+      pointer-events:none; overflow:hidden; z-index:5;
+    }
+    .fw-rocket {
+      position:absolute; width:3px; height:18px;
+      border-radius:2px 2px 0 0; pointer-events:none;
+      box-shadow:0 0 5px 2px currentColor;
+    }
+    @keyframes fwRocket {
+      0%   { opacity:1; transform:translateY(0); }
+      88%  { opacity:.9; }
+      100% { opacity:0; transform:translateY(var(--fy)); }
+    }
+    .fw-burst {
+      position:absolute; width:6px; height:6px;
+      border-radius:50%; pointer-events:none;
+    }
+    @keyframes fwBurst {
+      0%   { opacity:1; transform:translate(0,0) scale(1.5); }
+      65%  { opacity:.85; }
+      100% { opacity:0; transform:translate(var(--bx),var(--by)) scale(0); }
+    }
   </style>
 </head>
 <body>
 
   <canvas id="bgc"></canvas>
+  <div id="fw-layer"></div>
   <div id="landmark-banner"></div>
 
   <!-- HUD -->
@@ -806,6 +831,119 @@ function sfxGameOver() {
     setTimeout(() => sfxTone(f, .2, 'square', .08), i*140));
 }
 
+// ============================================================
+//  BACKGROUND BRIGHTNESS + AMBIENT FIREWORKS
+// ============================================================
+let ambientFWGen = 0;
+let ambientFWLevel = 0;
+
+function bgBrightness() {
+  return (0.10 + Math.min(1, score / 9000) * 0.80).toFixed(3);
+}
+
+function refreshBgOpacity() {
+  const bc = document.getElementById('bgc');
+  if (bc && !bc.style.transition.includes('opacity 0.5')) // don't interrupt fade
+    bc.style.opacity = bgBrightness();
+}
+
+function sfxBang(vol=0.38) {
+  if (!audioReady) return;
+  const ac = getAC(), t = ac.currentTime;
+  const boom = ac.createOscillator(), bg = ac.createGain();
+  boom.connect(bg); bg.connect(ac.destination);
+  boom.type = 'sine';
+  boom.frequency.setValueAtTime(90+Math.random()*50, t);
+  boom.frequency.exponentialRampToValueAtTime(18, t+0.38);
+  bg.gain.setValueAtTime(vol, t);
+  bg.gain.exponentialRampToValueAtTime(0.001, t+0.38);
+  boom.start(t); boom.stop(t+0.4);
+  const nlen = Math.floor(ac.sampleRate * 0.13);
+  const nbuf = ac.createBuffer(1, nlen, ac.sampleRate);
+  const nd   = nbuf.getChannelData(0);
+  for (let i=0;i<nlen;i++) nd[i]=Math.random()*2-1;
+  const ns = ac.createBufferSource(); ns.buffer = nbuf;
+  const flt = ac.createBiquadFilter(); flt.type='highpass'; flt.frequency.value=2800;
+  const ng = ac.createGain();
+  ns.connect(flt); flt.connect(ng); ng.connect(ac.destination);
+  ng.gain.setValueAtTime(vol*0.5, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t+0.13);
+  ns.start(t); ns.stop(t+0.14);
+}
+
+function fwBurstAt(x, y, size=1) {
+  const layer = document.getElementById('fw-layer');
+  if (!layer) return;
+  const cols = ['#ff0','#f80','#f0f','#0ff','#f55','#8fa','#ffa','#8af','#fff','#fa0','#aff'];
+  const n = Math.round(14 + size * 10);
+  for (let i=0; i<n; i++) {
+    const sp = document.createElement('div');
+    sp.className = 'fw-burst';
+    const angle = (i/n)*Math.PI*2;
+    const dist  = (35 + Math.random()*75) * size;
+    const dur   = (0.5 + Math.random()*0.55);
+    sp.style.cssText = `left:${x}px;top:${y}px;background:${cols[i%cols.length]};`
+      +`--bx:${Math.cos(angle)*dist}px;--by:${Math.sin(angle)*dist}px;`
+      +`animation:fwBurst ${dur}s ease-out forwards;`;
+    layer.appendChild(sp);
+    setTimeout(()=>sp.remove(), (dur+0.12)*1000);
+  }
+}
+
+function launchFW() {
+  if (gameOver) return;
+  const layer = document.getElementById('fw-layer');
+  if (!layer) return;
+  const W=window.innerWidth, H=window.innerHeight;
+  const startX = (0.05 + Math.random()*0.9) * W;
+  const startY = H + 10;
+  const targetY = (0.06 + Math.random()*0.52) * H;
+  const rise    = targetY - startY;
+  const dur     = 0.38 + Math.random()*0.45;
+  const col     = ['#fff','#ffe','#ffc','#cff','#fcf','#cfc'][Math.random()*6|0];
+
+  const rocket = document.createElement('div');
+  rocket.className = 'fw-rocket';
+  rocket.style.cssText = `left:${startX-1.5}px;top:${startY}px;color:${col};background:${col};`
+    +`--fy:${rise}px;animation:fwRocket ${dur}s ease-in forwards;`;
+  layer.appendChild(rocket);
+
+  setTimeout(() => {
+    rocket.remove();
+    const sz = 0.75 + ambientFWLevel * 0.1;
+    fwBurstAt(startX, targetY, sz);
+    sfxBang(0.18 + ambientFWLevel * 0.025);
+    if (ambientFWLevel >= 5 && Math.random()<0.45)
+      setTimeout(()=>fwBurstAt(startX+(Math.random()-.5)*70, targetY-Math.random()*45, sz*.75), 110);
+    if (ambientFWLevel >= 8 && Math.random()<0.5)
+      setTimeout(()=>fwBurstAt(startX+(Math.random()-.5)*90, targetY-Math.random()*60, sz*.6), 220);
+  }, dur*1000);
+}
+
+function startAmbientFW() {
+  const gen = ++ambientFWGen;
+  const delays = [0, 4000, 3000, 2500, 2000, 1500, 1200, 900, 650, 450];
+  const base   = delays[Math.min(9, ambientFWLevel)];
+  if (!base) return;
+  function sched() {
+    if (ambientFWGen !== gen || gameOver || paused) return;
+    const cnt = ambientFWLevel >= 8 ? 3 : ambientFWLevel >= 6 ? 2 : 1;
+    for (let i=0;i<cnt;i++) setTimeout(launchFW, i*180);
+    setTimeout(sched, base + (Math.random()-.5)*base*0.35);
+  }
+  setTimeout(sched, base*0.25 + Math.random()*base*0.3);
+}
+
+function stopAmbientFW() { ambientFWGen++; }
+
+function updateAmbientFW() {
+  const lv = Math.min(9, Math.floor(score/2000));
+  if (lv === ambientFWLevel) return;
+  ambientFWLevel = lv;
+  stopAmbientFW();
+  if (lv > 0 && !paused && !gameOver) startAmbientFW();
+}
+
 function sfxExplosion() {
   if (!audioReady) return;
   const ac = getAC(), t = ac.currentTime;
@@ -942,6 +1080,8 @@ function init() {
   BS = 60 / TRACKS[0].bpm;
   SIXTEENTH = BS / 4;
   updateTrackDisplay();
+  ambientFWLevel = 0;
+  stopAmbientFW();
   stopBGM(); stopLuckyBGM(false);
   if (audioReady && musicOn) {
     if (cur.name === 'LUCKY') startLuckyBGM();
@@ -1162,7 +1302,7 @@ function updateBG(force=false) {
   if(_bgIdx<0||force||idx===_bgIdx){
     const prev=_bgIdx; _bgIdx=idx;
     drawNew();
-    bc.style.transition='none'; bc.style.opacity='0.88';
+    bc.style.transition='none'; bc.style.opacity=bgBrightness();
     return;
   }
 
@@ -1174,7 +1314,7 @@ function updateBG(force=false) {
     bc.removeEventListener('transitionend',onEnd);
     drawNew();
     bc.style.transition='opacity 0.55s ease-in';
-    bc.style.opacity='0.88';
+    bc.style.opacity=bgBrightness();
     showLandmarkBanner(LANDMARKS[idx].label);
   });
 }
@@ -1684,6 +1824,8 @@ function updateHUD() {
   document.getElementById('hud-level').textContent=level;
   document.getElementById('hud-lines').textContent=lines;
   checkMusicTrack();
+  refreshBgOpacity();
+  updateAmbientFW();
 }
 
 function checkMusicTrack() {
@@ -1733,7 +1875,7 @@ function loop(ts) {
 // ============================================================
 function endGame() {
   gameOver=true;
-  stopBGM(); stopLuckyBGM(false); sfxGameOver();
+  stopBGM(); stopLuckyBGM(false); stopAmbientFW(); sfxGameOver();
   document.getElementById('ov-score').innerHTML=
     `Score: ${score.toLocaleString()}<br>Level: ${level} &nbsp;Lines: ${lines}`;
   document.getElementById('overlay').classList.remove('hidden');
@@ -1743,10 +1885,11 @@ function togglePause() {
   if(gameOver) return;
   paused=!paused;
   document.getElementById('pause-lbl').classList.toggle('show',paused);
-  if(paused) { stopBGM(); stopLuckyBGM(false); }
-  else { lastTs=null; if(audioReady&&musicOn) {
-    if (cur && cur.name==='LUCKY') startLuckyBGM(); else startBGM();
-  }}
+  if(paused) { stopBGM(); stopLuckyBGM(false); stopAmbientFW(); }
+  else { lastTs=null;
+    if(audioReady&&musicOn) { if(cur&&cur.name==='LUCKY') startLuckyBGM(); else startBGM(); }
+    if(ambientFWLevel>0) startAmbientFW();
+  }
 }
 
 // ============================================================

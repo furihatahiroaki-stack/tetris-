@@ -236,6 +236,15 @@
       0%   { opacity:1; transform:translate(0,0) scale(1); }
       100% { opacity:0; transform:var(--tx) scale(0); }
     }
+    .fw-spark {
+      position:absolute; width:5px; height:5px;
+      border-radius:50%; pointer-events:none;
+    }
+    @keyframes fwFly {
+      0%   { opacity:1; transform:translate(0,0) scale(1.3); }
+      70%  { opacity:.9; }
+      100% { opacity:0; transform:translate(var(--fwx),var(--fwy)) scale(0); }
+    }
   </style>
 </head>
 <body>
@@ -935,6 +944,31 @@ function clearLines() {
 // ============================================================
 //  VISUAL FX
 // ============================================================
+function fxFireworks(n) {
+  const pc = document.getElementById('particles');
+  const pw = boardCanvas.width, ph = boardCanvas.height;
+  const cols = ['#ff0','#f80','#f0f','#0ff','#f44','#8f8','#ff8','#88f','#fff'];
+  const bursts = n >= 4 ? 6 : n >= 2 ? 4 : 2;
+  for (let b = 0; b < bursts; b++) {
+    setTimeout(() => {
+      const cx = (0.1 + Math.random() * 0.8) * pw;
+      const cy = (0.1 + Math.random() * 0.65) * ph;
+      for (let i = 0; i < 18; i++) {
+        const sp = document.createElement('div');
+        sp.className = 'fw-spark';
+        const angle = (i / 18) * Math.PI * 2;
+        const dist = 35 + Math.random() * 55;
+        const dur = 0.45 + Math.random() * 0.35;
+        sp.style.cssText = `left:${cx}px;top:${cy}px;background:${cols[i%cols.length]};` +
+          `--fwx:${Math.cos(angle)*dist}px;--fwy:${Math.sin(angle)*dist}px;` +
+          `animation:fwFly ${dur}s ease-out forwards;`;
+        pc.appendChild(sp);
+        setTimeout(() => sp.remove(), (dur + 0.1) * 1000);
+      }
+    }, b * 130);
+  }
+}
+
 function fxClear(n) {
   // Flash
   const f=document.getElementById('flash');
@@ -968,6 +1002,7 @@ function fxClear(n) {
     pc.appendChild(sp);
     setTimeout(()=>sp.remove(), 900);
   }
+  fxFireworks(n);
 }
 
 // ============================================================

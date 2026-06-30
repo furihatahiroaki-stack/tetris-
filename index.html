@@ -804,7 +804,7 @@ function mkPiece(name) {
 
 function randomPiece() {
   if (Math.random() < 1/30)
-    return { name:'LUCKY', mat:[[1,1,1,1]], x:3, y:0 };
+    return { name:'LUCKY', mat:[[1,1,1,1,1]], x:2, y:0 };
   return mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
 }
 
@@ -885,7 +885,7 @@ function rotate() {
 
 function lock() {
   const isLucky = cur.name === 'LUCKY';
-  const ecx = cur.x + 1, ecy = cur.y;
+  const ecx = cur.x + 2, ecy = cur.y;
   for(let r=0;r<cur.mat.length;r++)
     for(let c=0;c<cur.mat[r].length;c++) {
       if(!cur.mat[r][c]) continue;
@@ -1407,8 +1407,8 @@ function drawGirl(bx, by) {
 function drawLuckyBar() {
   const t = Date.now() / 1000;
   // 虹色セル
-  for (let c = 0; c < 4; c++) {
-    const hue = (t * 200 + c * 70) % 360;
+  for (let c = 0; c < 5; c++) {
+    const hue = (t * 200 + c * 60) % 360;
     drawCell(ctx, cur.x+c, cur.y, `hsl(${hue},100%,65%)`);
     // キラキラ縁
     ctx.fillStyle = `hsl(${(hue+40)%360},100%,82%)`;
@@ -1418,11 +1418,11 @@ function drawLuckyBar() {
   // キャラクター (ピースの上に描画)
   const P = Math.max(3, Math.floor(CELL / 4));
   const charW = 10 * P;
-  const bx = cur.x * CELL + Math.floor((4*CELL - charW) / 2);
+  const bx = cur.x * CELL + Math.floor((5*CELL - charW) / 2);
   const by = cur.y * CELL - 10 * P;
   drawGirl(bx, by);
   // スパークル
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     const sx = (cur.x + i + 0.5) * CELL;
     const sy = (cur.y + 0.5) * CELL;
     const sh = (t * 360 + i * 90) % 360;

@@ -1131,7 +1131,7 @@ function mkPiece(name) {
 }
 
 function randomPiece() {
-  if (Math.random() < (cleared9000 ? 1/8 : 1/30))
+  if (!cleared9000 && Math.random() < 1/30)
     return { name:'LUCKY', mat:[[1,1,1,1,1]], x:2, y:0 };
   return mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
 }

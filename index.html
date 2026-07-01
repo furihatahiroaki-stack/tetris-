@@ -466,12 +466,12 @@ let BS = 60 / 200; // updated per track
 
 const TRACKS = [
   { name:'レッキングクルー', bpm:120, mp3:'wrecking.mp3', melody:[] },
-  { name:'天地を食らう２', bpm:120, mp3:'tenchi.mp3', melody:[] },
   { name:'ゼルダの伝説', bpm:120, mp3:'zelda.mp3', melody:[] },
   { name:'キングコング２', bpm:120, mp3:'kongu.mp3', melody:[] },
   { name:'ドラえもん', bpm:120, mp3:'doraemon.mp3', melody:[] },
   { name:'スターソルジャー', bpm:120, mp3:'star.mp3', melody:[] },
   { name:'DQ2 ラブソング探して', bpm:120, mp3:'dq2.mp3', melody:[] },
+  { name:'天地を食らう２', bpm:120, mp3:'tenchi.mp3', melody:[] },
   { name:'DQ3 勇者の挑戦', bpm:120, mp3:'dq3.mp3', melody:[] },
   { name:'コロブチカ', bpm:200, melody:[
     ['A4',1],['C5',1],['E5',1],['A5',1],
@@ -2024,7 +2024,7 @@ function checkMilestones() {
 
 function checkMusicTrack() {
   if (cleared9000) return;
-  const t = Math.min(Math.floor(score / 1000), TRACKS.length - 1);
+  const t = Math.min(Math.floor(score / 1500), TRACKS.length - 1);
   if (t === musicTrack) return;
   musicTrack = t;
   BS = 60 / TRACKS[musicTrack].bpm;
@@ -2041,7 +2041,7 @@ function checkMusicTrack() {
 function updateTrackDisplay() {
   const t = TRACKS[musicTrack];
   document.getElementById('track-name').textContent = t.name;
-  const next = 1000 * (musicTrack + 1);
+  const next = 1500 * (musicTrack + 1);
   document.getElementById('track-next').textContent =
     musicTrack < TRACKS.length - 1 ? `次: ${next.toLocaleString()}pt〜` : 'MAX STAGE';
 }

@@ -905,6 +905,7 @@ let ambientFWGen = 0;
 let ambientFWLevel = 0;
 
 function bgBrightness() {
+  if (cleared9000) return '1.000';
   return (0.10 + Math.min(1, score / 9000) * 0.80).toFixed(3);
 }
 
@@ -1132,7 +1133,7 @@ function mkPiece(name) {
 }
 
 function randomPiece() {
-  if (!cleared9000 && Math.random() < 1/30)
+  if (Math.random() < (cleared9000 ? 1/8 : 1/30))
     return { name:'LUCKY', mat:[[1,1,1,1,1]], x:2, y:0 };
   return mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
 }
@@ -1364,7 +1365,71 @@ function showLandmarkBanner(label) {
   setTimeout(()=>el.classList.remove('show'),3800);
 }
 
+/* ---- Zoma pixel art background ---- */
+function drawZomaBG() {
+  const bc = document.getElementById('bgc');
+  if (!bc) return;
+  bc.width  = window.innerWidth;
+  bc.height = window.innerHeight;
+  const bctx = bc.getContext('2d');
+  bctx.fillStyle = '#000';
+  bctx.fillRect(0, 0, bc.width, bc.height);
+
+  const C = {
+    K:'#0a0a18', Y:'#ffcc00', y:'#ddaa00', W:'#eeeeff',
+    R:'#ee3344', r:'#aa1122', B:'#4488ff', b:'#2255cc',
+    P:'#cc1144', p:'#881133', O:'#cc8822', o:'#eeaa33',
+    g:'#bbbbbb', G:'#666666',
+  };
+  // 20×21 pixel art of Zoma
+  const ART = [
+    '....YY.....YY.......',  //  0 horn tips
+    '...YYYY...YYYY......',  //  1 horns
+    '..YYYYKKKKYYYY......',  //  2 head+horns
+    '..KKKKKKKKKKKK......',  //  3 head top
+    '..KKWWWWWWWWKK......',  //  4 eye top (W=white)
+    '..KKWRRRRRRRWKk.....',  //  5 red eye
+    '..KKWRrKKKrRWKk.....',  //  6 dark pupil
+    '..KKWRRRRRRRWKk.....',  //  7 red eye
+    '..KKWWWWWWWWKK......',  //  8 eye bottom
+    '..BBKKgggKKBBb......',  //  9 jaw/teeth
+    '.pPBBBBBBBBBBPp.....',  // 10 shoulders
+    'pPPBBbbBBbbBBBPPp...',  // 11 cape start
+    'PPPPbbbbbbbbbbPPPP..',  // 12 cape wide
+    'PPPPoOOOOOOOoOPPPP.',  // 13 robe begins
+    'PPPPoOooooooOoPPPP.',  // 14 robe
+    'pPPPoOooooooOoPPPp.',  // 15 robe
+    '.pPPoOooooooOoPPp..',  // 16 robe lower
+    '..pPoOooooooOoPp...',  // 17 robe bottom
+    '...poOooooooOop....',  // 18 robe hem
+    '....BBBBBBBBBBb....',  // 19 legs
+    '....bBBBBBBBBbb....',  // 20 feet
+  ];
+
+  const artW = ART.reduce((m,r)=>Math.max(m,r.length),0);
+  const artH = ART.length;
+  const dot = Math.max(6, Math.min(
+    Math.floor(bc.width  / artW * 0.9),
+    Math.floor(bc.height / artH * 0.85)
+  ));
+  const ox = Math.floor((bc.width  - artW * dot) / 2);
+  const oy = Math.floor((bc.height - artH * dot) / 2);
+
+  for (let r = 0; r < artH; r++) {
+    for (let c = 0; c < ART[r].length; c++) {
+      const ch = ART[r][c];
+      if (ch === '.' || ch === ' ') continue;
+      bctx.fillStyle = C[ch] || '#ff00ff';
+      bctx.fillRect(ox + c*dot, oy + r*dot, dot, dot);
+    }
+  }
+
+  bc.style.transition = 'none';
+  bc.style.opacity = '1';
+}
+
 function updateBG(force=false) {
+  if (cleared9000) { drawZomaBG(); return; }
   const idx=getLandmarkIdx();
   const bc=document.getElementById('bgc');
   if(!bc) return;
@@ -2020,6 +2085,7 @@ function checkMilestones() {
       updateTrackDisplay();
       if (audioReady && musicOn && !paused) { stopMp3BGM(); startBGM(); }
     }
+    updateBG(true);
   }
 }
 

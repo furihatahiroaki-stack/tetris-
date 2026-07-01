@@ -1989,6 +1989,7 @@ function checkMusicTrack() {
   updateTrackDisplay();
   if (!audioReady || !musicOn || gameOver || paused) return;
   const luckyActive = luckyBGMNodes.length > 0;
+  stopMp3BGM();
   startBGM();
   if (luckyActive && bgmGain && audioCtx)
     bgmGain.gain.setValueAtTime(0, audioCtx.currentTime);

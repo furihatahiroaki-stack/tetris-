@@ -1706,7 +1706,8 @@ function gameClear() {
   afterClear = true;
   stopBGM(); stopLuckyBGM(false); stopAmbientFW();
   stopMp3BGM();
-  mp3Audio = new Audio('dq2.mp3');
+  mp3Audio = new Audio('dq3.mp3');
+  mp3Audio._mpsrc = 'dq3.mp3';
   mp3Audio.loop = true;
   mp3Audio.play().catch(()=>{});
   document.getElementById('ov-title').textContent = 'STAGE CLEAR!';

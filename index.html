@@ -2056,7 +2056,7 @@ function loop(ts) {
 
   if(!paused) {
     dropTimer+=dt;
-    if(dropTimer>=(cleared9000 ? Math.max(60, dropMs(level)*0.5) : dropMs(level))) {
+    if(dropTimer>=(cleared9000 ? Math.max(50, dropMs(level)*0.2) : dropMs(level))) {
       dropTimer=0;
       if(!hits(cur.mat,cur.x,cur.y+1)) cur.y++;
       else lock();

@@ -620,12 +620,16 @@ function unlockAudio() {
 
 /* ---- MP3 BGM (HTML5 Audio, no Web Audio graph) ---- */
 function stopMp3BGM() {
-  if (mp3Audio) { mp3Audio.pause(); mp3Audio.src = ''; mp3Audio = null; }
+  if (mp3Audio) { mp3Audio.pause(); mp3Audio = null; }
 }
 
 function startMp3BGM(src) {
-  if (mp3Audio) { mp3Audio.volume = 1; return; } // already playing – just unmute
+  // same track already playing: just unmute
+  if (mp3Audio && mp3Audio._mpsrc === src) { mp3Audio.volume = 1; return; }
+  // different track or no track: stop old and start new
+  if (mp3Audio) { mp3Audio.pause(); mp3Audio = null; }
   mp3Audio = new Audio(src);
+  mp3Audio._mpsrc = src;
   mp3Audio.loop = true;
   mp3Audio.play().catch(() => {});
 }
@@ -645,7 +649,7 @@ function startBGM() {
   if (ac.state === 'suspended') { ac.resume().then(startBGM); return; }
   const track = TRACKS[musicTrack];
   if (track.mp3) {
-    stopBGM();           // stop synthesis
+    stopBGM();
     startMp3BGM(track.mp3);
     return;
   }

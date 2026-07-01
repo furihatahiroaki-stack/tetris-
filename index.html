@@ -436,6 +436,7 @@ let bgmGen     = 0;
 let bgmTimer   = null;
 let bgmNodes   = [];
 let mp3Audio   = null;
+let luckyMp3   = null;
 let luckyBGMGen   = 0;
 let luckyBGMTimer = null;
 let luckyBGMNodes = [];
@@ -1028,46 +1029,20 @@ function startLuckyBGM() {
   if (!audioReady) return;
   const ac = getAC();
   if (ac.state === 'suspended') { ac.resume().then(startLuckyBGM); return; }
-  // 通常BGMを無音化（シームレスに再開できるように）
+
+  // 通常BGMをミュート
   if (mp3Audio) {
-    mp3Audio.volume = 0;  // MP3をミュート
+    mp3Audio.volume = 0;
   } else {
     if (!bgmTimer && musicOn && !gameOver && !paused) startBGM();
     if (bgmGain) bgmGain.gain.setValueAtTime(0, ac.currentTime);
   }
-  luckyBGMGen++;
-  const gen = luckyBGMGen;
-  luckyBGMNodes = [];
-  let t = ac.currentTime + 0.05;
 
-  function schedLucky() {
-    if (luckyBGMGen !== gen) return;
-    for (const [note, beats] of LUCKY_BGM) {
-      const dur = beats * BS;
-      if (LUCKY_HZ[note]) {
-        // メイン: サイン波（ベル系）
-        const osc = ac.createOscillator(), g = ac.createGain();
-        osc.connect(g); g.connect(masterGain);
-        osc.type = 'sine'; osc.frequency.value = LUCKY_HZ[note];
-        g.gain.setValueAtTime(0.20, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.72);
-        osc.start(t); osc.stop(t + dur);
-        luckyBGMNodes.push(osc);
-        // キラキラ: トライアングル1オクターブ上
-        const tw = ac.createOscillator(), tg = ac.createGain();
-        tw.connect(tg); tg.connect(masterGain);
-        tw.type = 'triangle'; tw.frequency.value = LUCKY_HZ[note] * 2;
-        tg.gain.setValueAtTime(0.07, t);
-        tg.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.4);
-        tw.start(t); tw.stop(t + dur * 0.45);
-        luckyBGMNodes.push(tw);
-      }
-      t += dur;
-    }
-    const msLeft = (t - ac.currentTime - 0.4) * 1000;
-    luckyBGMTimer = setTimeout(schedLucky, Math.max(50, msLeft));
-  }
-  schedLucky();
+  // ラッキー棒 MP3 再生
+  if (luckyMp3) { luckyMp3.pause(); luckyMp3.src = ''; }
+  luckyMp3 = new Audio(MP3_KAZACHOK);
+  luckyMp3.loop = true;
+  luckyMp3.play().catch(() => {});
 }
 
 function stopLuckyBGM(resume=true) {
@@ -1076,11 +1051,13 @@ function stopLuckyBGM(resume=true) {
   const now = audioCtx ? audioCtx.currentTime : 0;
   for (const n of luckyBGMNodes) { try { n.stop(now+0.05); n.disconnect(); } catch{} }
   luckyBGMNodes = [];
+  // ラッキー棒 MP3 停止
+  if (luckyMp3) { luckyMp3.pause(); luckyMp3.src = ''; luckyMp3 = null; }
   if (resume && audioReady && musicOn && !gameOver && !paused) {
     if (mp3Audio) {
-      mp3Audio.volume = 1;  // MP3ミュート解除
+      mp3Audio.volume = 1;
     } else if (bgmGain && bgmTimer) {
-      bgmGain.gain.setValueAtTime(1, audioCtx.currentTime);  // 合成BGMミュート解除
+      bgmGain.gain.setValueAtTime(1, audioCtx.currentTime);
     } else {
       startBGM();
     }

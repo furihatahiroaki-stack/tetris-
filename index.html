@@ -1129,17 +1129,19 @@ function pinchBonus() {
 }
 
 function randomPiece() {
-  const base = cleared9000 ? 1/8 : 1/30;
-  if (Math.random() < base + pinchBonus())
+  if (Math.random() < 1/30 + pinchBonus())
     return { name:'LUCKY', mat:[[1,1,1,1,1]], x:2, y:0 };
   return mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
 }
+
+let afterClear = false;
 
 function init() {
   board     = Array.from({length:ROWS}, ()=>Array(COLS).fill(null));
   score     = 0; level = 1; lines = 0;
   paused    = false; gameOver = false;
   cleared9000 = false;
+  afterClear  = false;
   dropTimer = 0; lastTs = null;
   nxt = randomPiece();
   cur = advance();
@@ -1161,6 +1163,37 @@ function init() {
     if (cur.name === 'LUCKY') startLuckyBGM();
     else startBGM();
   }
+  requestAnimationFrame(loop);
+}
+
+function initBoss() {
+  board     = Array.from({length:ROWS}, ()=>Array(COLS).fill(null));
+  score     = 9000; level = 1; lines = 0;
+  paused    = false; gameOver = false;
+  cleared9000 = true;
+  afterClear  = false;
+  dropTimer = 0; lastTs = null;
+  nxt = randomPiece();
+  cur = advance();
+  const _ov = document.getElementById('overlay');
+  _ov.classList.add('hidden');
+  _ov.classList.remove('clear-mode');
+  document.getElementById('ov-title').textContent = 'GAME OVER';
+  document.getElementById('ov-clear-sub').textContent = '';
+  document.getElementById('pause-lbl').classList.remove('show');
+  const dq3Idx = TRACKS.findIndex(t => t.mp3 === 'dq3.mp3');
+  musicTrack = dq3Idx >= 0 ? dq3Idx : 0;
+  BS = 60 / TRACKS[musicTrack].bpm;
+  SIXTEENTH = BS / 4;
+  updateTrackDisplay();
+  ambientFWLevel = 0;
+  stopAmbientFW();
+  stopBGM(); stopMp3BGM(); stopLuckyBGM(false);
+  updateBG(true);
+  document.getElementById('hud-score').textContent = score.toLocaleString();
+  document.getElementById('hud-level').textContent = level;
+  document.getElementById('hud-lines').textContent = lines;
+  if (audioReady && musicOn) startBGM();
   requestAnimationFrame(loop);
 }
 
@@ -1670,6 +1703,7 @@ function endGame() {
 
 function gameClear() {
   gameOver = true;
+  afterClear = true;
   stopBGM(); stopLuckyBGM(false); stopAmbientFW();
   stopMp3BGM();
   mp3Audio = new Audio('dq2.mp3');
@@ -1782,9 +1816,9 @@ document.addEventListener('contextmenu', e=>e.preventDefault());
 //  RESTART
 // ============================================================
 document.getElementById('btn-restart').addEventListener('touchstart', e=>{
-  e.preventDefault(); unlockAudio(); init();
+  e.preventDefault(); unlockAudio(); afterClear ? initBoss() : init();
 },{passive:false});
-document.getElementById('btn-restart').addEventListener('click', init);
+document.getElementById('btn-restart').addEventListener('click', () => afterClear ? initBoss() : init());
 
 // ============================================================
 //  VISIBILITY (auto-pause when tab hidden)

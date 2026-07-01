@@ -220,6 +220,17 @@
     #cbtn-hard   { grid-column:2/4; grid-row:2; background:rgba(233,69,96,0.13); border-color:rgba(233,69,96,0.28); }
 
 
+    #version-label {
+      position: fixed;
+      bottom: 4px;
+      right: 8px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.28);
+      font-family: monospace;
+      pointer-events: none;
+      z-index: 999;
+    }
+
     /* ── Line-clear particle effect ── */
     #particles {
       position: absolute; inset: 0;
@@ -318,12 +329,10 @@
         <div id="track-name">カザチョーク</div>
         <div id="track-next">次: 2,000pt〜</div>
       </div>
-      <div class="side-box" id="cossack-box">
-        <div class="side-label" style="text-align:center;letter-spacing:1px">🕺 DANCE</div>
-        <canvas id="cossack-canvas" width="100" height="100" style="display:block;margin:0 auto"></canvas>
-      </div>
     </div>
   </div>
+
+  <div id="version-label">v1.3</div>
 
   <!-- Touch controls -->
   <div id="controls">
@@ -419,8 +428,6 @@ function calcLayout() {
   const nc = Math.min(20, CELL);
   nextCanvas.width  = nc * 5;
   nextCanvas.height = nc * 5;
-  const dCv = document.getElementById('cossack-canvas');
-  if (dCv) dCv.width = nc * 5;
 }
 
 // ============================================================
@@ -1150,7 +1157,6 @@ function init() {
     if (cur.name === 'LUCKY') startLuckyBGM();
     else startBGM();
   }
-  initCossacks();
   requestAnimationFrame(loop);
 }
 
@@ -1327,6 +1333,63 @@ function fxClear(n) {
 // ============================================================
 //  BACKGROUND
 // ============================================================
+function drawZomaBG() {
+  const bc = document.getElementById('bgc');
+  if (!bc) return;
+  bc.width  = window.innerWidth;
+  bc.height = window.innerHeight;
+  const bctx = bc.getContext('2d');
+  bctx.fillStyle = '#000';
+  bctx.fillRect(0, 0, bc.width, bc.height);
+  const C = {
+    K:'#0a0a18', Y:'#ffcc00', y:'#ddaa00', W:'#eeeeff',
+    R:'#ee3344', r:'#aa1122', B:'#4488ff', b:'#2255cc',
+    P:'#cc1144', p:'#881133', O:'#cc8822', o:'#eeaa33',
+    g:'#bbbbbb', G:'#666666',
+  };
+  const ART = [
+    '....YY.....YY.......',
+    '...YYYY...YYYY......',
+    '..YYYYKKKKYYYY......',
+    '..KKKKKKKKKKKK......',
+    '..KKWWWWWWWWKK......',
+    '..KKWRRRRRRRWKk.....',
+    '..KKWRrKKKrRWKk.....',
+    '..KKWRRRRRRRWKk.....',
+    '..KKWWWWWWWWKK......',
+    '..BBKKgggKKBBb......',
+    '.pPBBBBBBBBBBPp.....',
+    'pPPBBbbBBbbBBBPPp...',
+    'PPPPbbbbbbbbbbPPPP..',
+    'PPPPoOOOOOOOoOPPPP.',
+    'PPPPoOooooooOoPPPP.',
+    'pPPPoOooooooOoPPPp.',
+    '.pPPoOooooooOoPPp..',
+    '..pPoOooooooOoPp...',
+    '...poOooooooOop....',
+    '....BBBBBBBBBBb....',
+    '....bBBBBBBBBbb....',
+  ];
+  const artW = ART.reduce((m, r) => Math.max(m, r.length), 0);
+  const artH = ART.length;
+  const dot = Math.max(6, Math.min(
+    Math.floor(bc.width  / artW * 0.9),
+    Math.floor(bc.height / artH * 0.85)
+  ));
+  const ox = Math.floor((bc.width  - artW * dot) / 2);
+  const oy = Math.floor((bc.height - artH * dot) / 2);
+  for (let r = 0; r < artH; r++) {
+    for (let c = 0; c < ART[r].length; c++) {
+      const ch = ART[r][c];
+      if (ch === '.' || ch === ' ') continue;
+      bctx.fillStyle = C[ch] || '#ff00ff';
+      bctx.fillRect(ox + c * dot, oy + r * dot, dot, dot);
+    }
+  }
+  bc.style.transition = 'none';
+  bc.style.opacity = '1';
+}
+
 function bgBrightness() {
   if (cleared9000) return '1.000';
   return Math.min(0.85, 0.10 + score / 5000 * 0.75).toFixed(3);
@@ -1504,99 +1567,6 @@ function renderNext() {
     }
 }
 
-// ============================================================
-//  COSSACK DANCERS
-// ============================================================
-let cossackRaf = 0;
-let cossackT   = 0;
-
-function initCossacks() {
-  const cv = document.getElementById('cossack-canvas');
-  if (!cv || cossackRaf) return;
-  function frame(ts) {
-    cossackT = ts / 1000;
-    renderCossacks(cv);
-    cossackRaf = requestAnimationFrame(frame);
-  }
-  cossackRaf = requestAnimationFrame(frame);
-}
-
-function renderCossacks(cv) {
-  const count = Math.min(8, 1 + Math.floor(score / 1000));
-  const W = cv.width, H = cv.height;
-  const dc = cv.getContext('2d');
-  dc.clearRect(0, 0, W, H);
-
-  // 2 rows of 4; row 1 fills first then row 2 appears
-  const row1 = Math.min(count, 4);
-  const row2 = Math.max(0, count - 4);
-  const gy1  = Math.floor(H / 2) - 2;   // ground line for top row
-  const gy2  = H - 2;                   // ground line for bottom row
-
-  for (let i = 0; i < row1; i++) {
-    const cx = W / row1 * (i + 0.5);
-    drawCossackDancer(dc, cx, gy1, cossackT * 5 + i * 0.9);
-  }
-  for (let i = 0; i < row2; i++) {
-    const cx = W / row2 * (i + 0.5);
-    drawCossackDancer(dc, cx, gy2, cossackT * 5 + (i + row1) * 0.9 + 0.4);
-  }
-}
-
-function drawCossackDancer(dc, cx, gy, phase) {
-  const kick = Math.sin(phase);          // -1..1 alternates leg
-  const bob  = Math.abs(kick) * 2;       // subtle body bob
-  cx = Math.round(cx);
-
-  // positions (bottom-up)
-  const hy     = gy   - 9  - bob;       // hip
-  const sy     = hy   - 10;             // shoulder
-  const ny     = sy   - 3;              // neck
-  const headY  = ny   - 4;              // head centre
-
-  // ── Hat (red papakha) ──
-  dc.fillStyle = '#cc1111';
-  dc.fillRect(cx - 5, headY - 8, 10, 5);
-  dc.fillStyle = '#ffcc00';
-  dc.fillRect(cx - 5, headY - 4, 10, 2);
-
-  // ── Head ──
-  dc.fillStyle = '#ffc888';
-  dc.beginPath();
-  dc.arc(cx, headY, 4, 0, Math.PI * 2);
-  dc.fill();
-
-  // ── Body (blue tunic, thick) ──
-  dc.strokeStyle = '#2255cc';
-  dc.lineWidth = 3;
-  dc.lineCap = 'round';
-  dc.beginPath();
-  dc.moveTo(cx, ny);
-  dc.lineTo(cx, hy);
-  dc.stroke();
-
-  // ── Arms (gold, on hips) ──
-  dc.strokeStyle = '#ffcc00';
-  dc.lineWidth = 1.5;
-  const ay = sy + 3;
-  dc.beginPath(); dc.moveTo(cx, ay); dc.lineTo(cx - 6, ay + 5); dc.stroke();
-  dc.beginPath(); dc.moveTo(cx, ay); dc.lineTo(cx + 6, ay + 5); dc.stroke();
-
-  // ── Legs (cossack kick) ──
-  dc.lineWidth = 2;
-  // kick leg (extends horizontally in direction of kick)
-  dc.strokeStyle = '#cc3300';
-  dc.beginPath();
-  dc.moveTo(cx, hy);
-  dc.lineTo(cx + 11 * kick, hy - 1);
-  dc.stroke();
-  // support leg (bent downward, opposite side)
-  dc.strokeStyle = '#882200';
-  dc.beginPath();
-  dc.moveTo(cx, hy);
-  dc.lineTo(kick > 0 ? cx - 3 : cx + 3, gy - 2);
-  dc.stroke();
-}
 
 // ============================================================
 //  HUD
@@ -1613,8 +1583,8 @@ function updateHUD() {
 
 function checkMilestones() {
   if (gameOver) return;
-  // 12000点 → ゲームクリア（先にチェック）
-  if (score >= 12000) { gameClear(); return; }
+  // 15000点 → ゲームクリア（先にチェック）
+  if (score >= 15000) { gameClear(); return; }
   // 9000点 → ボード全消去 + DQ3 BGM
   if (!cleared9000 && score >= 9000) {
     cleared9000 = true;

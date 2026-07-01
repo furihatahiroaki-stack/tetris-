@@ -436,7 +436,6 @@ let bgmGen     = 0;
 let bgmTimer   = null;
 let bgmNodes   = [];
 let mp3Audio   = null;
-let mp3Source  = null;
 let luckyBGMGen   = 0;
 let luckyBGMTimer = null;
 let luckyBGMNodes = [];
@@ -618,22 +617,15 @@ function unlockAudio() {
   }
 }
 
-/* ---- MP3 BGM ---- */
+/* ---- MP3 BGM (HTML5 Audio, no Web Audio graph) ---- */
 function stopMp3BGM() {
-  if (mp3Source) { try { mp3Source.disconnect(); } catch{} mp3Source = null; }
-  if (mp3Audio)  { mp3Audio.pause(); mp3Audio.src = ''; mp3Audio = null; }
+  if (mp3Audio) { mp3Audio.pause(); mp3Audio.src = ''; mp3Audio = null; }
 }
 
 function startMp3BGM(src) {
-  stopMp3BGM();
-  const ac = getAC();
-  mp3Audio = new Audio();
+  if (mp3Audio) { mp3Audio.volume = 1; return; } // already playing – just unmute
+  mp3Audio = new Audio(src);
   mp3Audio.loop = true;
-  mp3Audio.src = src;
-  mp3Source = ac.createMediaElementSource(mp3Audio);
-  mp3Source.connect(bgmGain);
-  masterGain.gain.setValueAtTime(1, ac.currentTime);
-  bgmGain.gain.setValueAtTime(1, ac.currentTime);
   mp3Audio.play().catch(() => {});
 }
 
@@ -644,7 +636,6 @@ function stopBGM() {
   const now = audioCtx ? audioCtx.currentTime : 0;
   for (const n of bgmNodes) { try { n.stop(now+.01); n.disconnect(); } catch{} }
   bgmNodes = [];
-  stopMp3BGM();
 }
 
 function startBGM() {
@@ -653,10 +644,11 @@ function startBGM() {
   if (ac.state === 'suspended') { ac.resume().then(startBGM); return; }
   const track = TRACKS[musicTrack];
   if (track.mp3) {
-    stopBGM();
+    stopBGM();           // stop synthesis
     startMp3BGM(track.mp3);
     return;
   }
+  stopMp3BGM();          // switching to synthesis: stop mp3
   stopBGM();
   masterGain.gain.setValueAtTime(1, ac.currentTime);
   bgmGain.gain.setValueAtTime(1, ac.currentTime);
@@ -1036,11 +1028,13 @@ function startLuckyBGM() {
   if (!audioReady) return;
   const ac = getAC();
   if (ac.state === 'suspended') { ac.resume().then(startLuckyBGM); return; }
-  // 通常BGMは止めずに無音化（位置を保持してシームレスに再開できるように）
-  if (!bgmTimer && !mp3Audio && musicOn && !gameOver && !paused) {
-    startBGM();  // BGMが停止していた場合だけ再起動（bgmGainは後で0に）
+  // 通常BGMを無音化（シームレスに再開できるように）
+  if (mp3Audio) {
+    mp3Audio.volume = 0;  // MP3をミュート
+  } else {
+    if (!bgmTimer && musicOn && !gameOver && !paused) startBGM();
+    if (bgmGain) bgmGain.gain.setValueAtTime(0, ac.currentTime);
   }
-  if (bgmGain) bgmGain.gain.setValueAtTime(0, ac.currentTime);
   luckyBGMGen++;
   const gen = luckyBGMGen;
   luckyBGMNodes = [];
@@ -1083,10 +1077,12 @@ function stopLuckyBGM(resume=true) {
   for (const n of luckyBGMNodes) { try { n.stop(now+0.05); n.disconnect(); } catch{} }
   luckyBGMNodes = [];
   if (resume && audioReady && musicOn && !gameOver && !paused) {
-    if (bgmGain && (bgmTimer || mp3Audio)) {
-      bgmGain.gain.setValueAtTime(1, audioCtx.currentTime);  // BGM再生中→音量を戻すだけ
+    if (mp3Audio) {
+      mp3Audio.volume = 1;  // MP3ミュート解除
+    } else if (bgmGain && bgmTimer) {
+      bgmGain.gain.setValueAtTime(1, audioCtx.currentTime);  // 合成BGMミュート解除
     } else {
-      startBGM();  // BGMが停止していた場合だけ再起動
+      startBGM();
     }
   }
 }
@@ -1102,7 +1098,7 @@ document.getElementById('music-btn').addEventListener('click', () => {
       else startBGM();
     }
   } else {
-    stopBGM();
+    stopBGM(); stopMp3BGM();
     stopLuckyBGM(false);
   }
 });
@@ -1142,7 +1138,7 @@ function init() {
   updateTrackDisplay();
   ambientFWLevel = 0;
   stopAmbientFW();
-  stopBGM(); stopLuckyBGM(false);
+  stopBGM(); stopMp3BGM(); stopLuckyBGM(false);
   if (audioReady && musicOn) {
     if (cur.name === 'LUCKY') startLuckyBGM();
     else startBGM();
@@ -2030,7 +2026,7 @@ function loop(ts) {
 // ============================================================
 function endGame() {
   gameOver=true;
-  stopBGM(); stopLuckyBGM(false); stopAmbientFW(); sfxGameOver();
+  stopBGM(); stopMp3BGM(); stopLuckyBGM(false); stopAmbientFW(); sfxGameOver();
   document.getElementById('ov-score').innerHTML=
     `Score: ${score.toLocaleString()}<br>Level: ${level} &nbsp;Lines: ${lines}`;
   document.getElementById('overlay').classList.remove('hidden');
@@ -2040,8 +2036,9 @@ function togglePause() {
   if(gameOver) return;
   paused=!paused;
   document.getElementById('pause-lbl').classList.toggle('show',paused);
-  if(paused) { stopBGM(); stopLuckyBGM(false); stopAmbientFW(); }
+  if(paused) { stopBGM(); if(mp3Audio) mp3Audio.pause(); stopLuckyBGM(false); stopAmbientFW(); }
   else { lastTs=null;
+    if(mp3Audio) mp3Audio.play().catch(()=>{});
     if(audioReady&&musicOn) { if(cur&&cur.name==='LUCKY') startLuckyBGM(); else startBGM(); }
     if(ambientFWLevel>0) startAmbientFW();
   }

@@ -2024,7 +2024,7 @@ function checkMilestones() {
 
 function checkMusicTrack() {
   if (cleared9000) return;
-  const t = Math.min(Math.floor(score / 2000), TRACKS.length - 1);
+  const t = Math.min(Math.floor(score / 1000), TRACKS.length - 1);
   if (t === musicTrack) return;
   musicTrack = t;
   BS = 60 / TRACKS[musicTrack].bpm;
@@ -2041,7 +2041,7 @@ function checkMusicTrack() {
 function updateTrackDisplay() {
   const t = TRACKS[musicTrack];
   document.getElementById('track-name').textContent = t.name;
-  const next = 2000 * (musicTrack + 1);
+  const next = 1000 * (musicTrack + 1);
   document.getElementById('track-next').textContent =
     musicTrack < TRACKS.length - 1 ? `次: ${next.toLocaleString()}pt〜` : 'MAX STAGE';
 }

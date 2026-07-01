@@ -143,6 +143,24 @@
       cursor: pointer;
       min-height: 50px; min-width: 140px;
     }
+    /* ── CLEAR mode ── */
+    #overlay.clear-mode { background: rgba(5,10,35,0.95); }
+    #overlay.clear-mode #ov-title {
+      color: #ffd700;
+      text-shadow: 0 0 18px #ffd700, 0 0 40px #ff8c00;
+      animation: clearPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes clearPulse {
+      0%,100% { text-shadow: 0 0 18px #ffd700, 0 0 40px #ff8c00; }
+      50%      { text-shadow: 0 0 36px #ffd700, 0 0 80px #ffaa00, 0 0 120px #ffe066; }
+    }
+    #ov-clear-sub {
+      font-size: 13px; color: #aad4ff; letter-spacing: 1px;
+      display: none;
+    }
+    #overlay.clear-mode #ov-clear-sub { display: block; }
+    #overlay.clear-mode #btn-restart { background: #ffd700; color: #1a1a2e; }
+    #overlay.clear-mode #btn-restart:hover { background: #ffbb00; }
 
     /* ── Side panel ── */
     #side-panel {
@@ -305,6 +323,7 @@
       <div id="pause-lbl">PAUSE</div>
       <div id="overlay" class="hidden">
         <div id="ov-title">GAME OVER</div>
+        <div id="ov-clear-sub"></div>
         <div id="ov-score"></div>
         <button id="btn-restart">PLAY AGAIN</button>
       </div>
@@ -1105,13 +1124,14 @@ document.getElementById('music-btn').addEventListener('click', () => {
 //  GAME STATE
 // ============================================================
 let board, cur, nxt, score, level, lines, paused, gameOver, dropTimer, lastTs;
+let cleared9000 = false;
 
 function mkPiece(name) {
   return { name, mat: SHAPES[name].map(r=>[...r]), x:3, y:0 };
 }
 
 function randomPiece() {
-  if (Math.random() < 1/30)
+  if (Math.random() < (cleared9000 ? 1/8 : 1/30))
     return { name:'LUCKY', mat:[[1,1,1,1,1]], x:2, y:0 };
   return mkPiece(PNAMES[Math.random()*PNAMES.length|0]);
 }
@@ -1120,11 +1140,16 @@ function init() {
   board     = Array.from({length:ROWS}, ()=>Array(COLS).fill(null));
   score     = 0; level = 1; lines = 0;
   paused    = false; gameOver = false;
+  cleared9000 = false;
   dropTimer = 0; lastTs = null;
   nxt = randomPiece();
   cur = advance();
   updateHUD(); updateBG(true);
-  document.getElementById('overlay').classList.add('hidden');
+  const _ov = document.getElementById('overlay');
+  _ov.classList.add('hidden');
+  _ov.classList.remove('clear-mode');
+  document.getElementById('ov-title').textContent = 'GAME OVER';
+  document.getElementById('ov-clear-sub').textContent = '';
   document.getElementById('pause-lbl').classList.remove('show');
   musicTrack = 0;
   BS = 60 / TRACKS[0].bpm;
@@ -1968,12 +1993,37 @@ function updateHUD() {
   document.getElementById('hud-score').textContent=score.toLocaleString();
   document.getElementById('hud-level').textContent=level;
   document.getElementById('hud-lines').textContent=lines;
+  checkMilestones();
   checkMusicTrack();
   refreshBgOpacity();
   updateAmbientFW();
 }
 
+function checkMilestones() {
+  if (gameOver) return;
+  // 12000点 → ゲームクリア（先にチェック）
+  if (score >= 12000) { gameClear(); return; }
+  // 9000点 → ボード全消去 + DQ3 BGM
+  if (!cleared9000 && score >= 9000) {
+    cleared9000 = true;
+    for (let r = 0; r < ROWS; r++) board[r].fill(null);
+    const f = document.getElementById('flash');
+    f.style.background = '#ffd700';
+    f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+    setTimeout(() => { f.style.background = '#fff'; }, 500);
+    const dq3Idx = TRACKS.findIndex(t => t.mp3 === 'dq3.mp3');
+    if (dq3Idx >= 0) {
+      musicTrack = dq3Idx;
+      BS = 60 / TRACKS[musicTrack].bpm;
+      SIXTEENTH = BS / 4;
+      updateTrackDisplay();
+      if (audioReady && musicOn && !paused) { stopMp3BGM(); startBGM(); }
+    }
+  }
+}
+
 function checkMusicTrack() {
+  if (cleared9000) return;
   const t = Math.min(Math.floor(score / 2000), TRACKS.length - 1);
   if (t === musicTrack) return;
   musicTrack = t;
@@ -2006,7 +2056,7 @@ function loop(ts) {
 
   if(!paused) {
     dropTimer+=dt;
-    if(dropTimer>=dropMs(level)) {
+    if(dropTimer>=(cleared9000 ? Math.max(60, dropMs(level)*0.5) : dropMs(level))) {
       dropTimer=0;
       if(!hits(cur.mat,cur.x,cur.y+1)) cur.y++;
       else lock();
@@ -2022,9 +2072,29 @@ function loop(ts) {
 function endGame() {
   gameOver=true;
   stopBGM(); stopMp3BGM(); stopLuckyBGM(false); stopAmbientFW(); sfxGameOver();
+  document.getElementById('ov-title').textContent = 'GAME OVER';
+  document.getElementById('ov-clear-sub').textContent = '';
   document.getElementById('ov-score').innerHTML=
     `Score: ${score.toLocaleString()}<br>Level: ${level} &nbsp;Lines: ${lines}`;
-  document.getElementById('overlay').classList.remove('hidden');
+  const _ov = document.getElementById('overlay');
+  _ov.classList.remove('clear-mode');
+  _ov.classList.remove('hidden');
+}
+
+function gameClear() {
+  gameOver = true;
+  stopBGM(); stopLuckyBGM(false); stopAmbientFW();
+  stopMp3BGM();
+  mp3Audio = new Audio('dq2.mp3');
+  mp3Audio.loop = true;
+  mp3Audio.play().catch(()=>{});
+  document.getElementById('ov-title').textContent = 'STAGE CLEAR!';
+  document.getElementById('ov-clear-sub').textContent = '〜 冒険の旅はつづく… 〜';
+  document.getElementById('ov-score').innerHTML =
+    `Score: ${score.toLocaleString()}<br>Level: ${level} &nbsp;Lines: ${lines}`;
+  const _ov = document.getElementById('overlay');
+  _ov.classList.add('clear-mode');
+  _ov.classList.remove('hidden');
 }
 
 function togglePause() {

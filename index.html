@@ -471,8 +471,8 @@ const TRACKS = [
   { name:'キングコング２', bpm:120, mp3:'kongu.mp3', melody:[] },
   { name:'ドラえもん', bpm:120, mp3:'doraemon.mp3', melody:[] },
   { name:'スターソルジャー', bpm:120, mp3:'star.mp3', melody:[] },
-  { name:'DQ2 ラブソング探して', bpm:120, mp3:'dq2.mp3', melody:[] },
   { name:'天地を食らう２', bpm:120, mp3:'tenchi.mp3', melody:[] },
+  { name:'DQ2 ラブソング探して', bpm:120, mp3:'dq2.mp3', melody:[] },
   { name:'DQ3 勇者の挑戦', bpm:120, mp3:'dq3.mp3', melody:[] },
   { name:'コロブチカ', bpm:200, melody:[
     ['A4',1],['C5',1],['E5',1],['A5',1],
@@ -1437,6 +1437,7 @@ function updateBG(force=false) {
   if(!force&&idx===_bgIdx&&sameSize) return;
 
   function drawNew(){
+    if (cleared9000) { drawZomaBG(); return; }
     bc.width=window.innerWidth; bc.height=window.innerHeight;
     drawLandmark(idx,bc);
   }
@@ -1455,6 +1456,7 @@ function updateBG(force=false) {
     if(e.propertyName!=='opacity') return;
     bc.removeEventListener('transitionend',onEnd);
     drawNew();
+    if (cleared9000) return;
     bc.style.transition='opacity 0.55s ease-in';
     bc.style.opacity=bgBrightness();
     showLandmarkBanner(LANDMARKS[idx].label);
